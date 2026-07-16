@@ -31,3 +31,7 @@ bash make.sh    # assembles src/ -> ui.html, index.html, KernTrip.zip,
   samples; the final step computes all corpus pairs.
 
 Development notes for Claude Code live in `CLAUDE.md`.
+
+## What It's Based On
+
+This concept builds on my teacher Frank Blokland’s work on patterning in Movable Latin Type, as well as Igino Marini’s presentation on iKern at Atypi. It also draws on Andre Fuchs’s collection of the most common kerning pairs.
