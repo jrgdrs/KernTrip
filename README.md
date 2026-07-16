@@ -1,3 +1,5 @@
+[![Test KernTrip](index.assets/11.51.52.png)](https://jrgdrs.github.io/KernTrip/)
+
 # KernTrip
 
 KernTrip computes optical spacing and kerning from glyph outlines.
@@ -6,15 +8,32 @@ No manual pair editing — all values come from the shapes themselves.
 Two products, one code base:
 
 - **Browser tool:** open `index.html`, drop a TTF/OTF font.
-- **Glyphs 3 plugin:** `glyphs/KernTrip.glyphsPlugin` (installed by `make.sh`);
+- **Glyphs 3 plugin:** `glyphs/KernTrip.glyphsPlugin` (installed from download);
   Script menu -> *KernTrip*.
 
-## Build
+
+## Test in your Browser
+
+[![Test KernTrip](index.assets/11.52.51.png)](https://jrgdrs.github.io/KernTrip/)
+
+You may test it live in your Browser now and without any further installations.
+
+https://jrgdrs.github.io/KernTrip/
+
+## Install in Glyxphs
+
+Download from https://jrgdrs.github.io/KernTrip/KernTrip.zip , unzip and doubleclick onto the Plugin to install it into Glyphs 3 (not 3 nor 4 ;-). You find the call KernTrip in the Scrpts menu.
+
+## Build by yourself
+
+If you want to build it by yourself, try
 
 ```bash
 bash make.sh    # assembles src/ -> ui.html, index.html, KernTrip.zip,
                 # and installs the plugin into Glyphs 3
 ```
+
+[![Test KernTrip](index.assets/11.52.20.png)](https://jrgdrs.github.io/KernTrip/)
 
 ## How it works, in short
 
