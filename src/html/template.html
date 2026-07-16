@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KernTrip — Font Kerning</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js"></script>
+<style>
+%%STYLE%%
+</style>
+</head>
+<body class="light-mode">
+
+<header>
+  <div class="header-title">
+    <div class="logo-mark" ondblclick="toggleLightMode()" title="Double-click to switch panel mode" style="cursor:pointer;user-select:none">KernTrip</div>
+    <span style="font-size:9px;color:var(--text);margin-left:4px;opacity:.7" name="version">v0.5.0</span>
+  </div>
+  <div class="header-sep"></div>
+  <div class="header-font-info" id="header-font-info">No font loaded</div>
+  <div class="header-actions">
+    <div id="global-status">—</div>
+    <button class="btn-hdr testpage" onclick="openTestPage()" title="Open A4 landscape test print">Testpage</button>
+  </div>
+</header>
+
+<!-- ── Setup assistant (wizard) ── -->
+<div class="help-overlay" id="wizard-overlay" onclick="if(event.target===this)wizClose()">
+  <div class="help-box" id="wizard-box" style="max-width:760px"></div>
+</div>
+
+<div class="layout">
+
+<!-- ══ LEFT ══ -->
+<div class="left-panel">
+
+  <div class="drop-zone" id="drop-zone" onclick="document.getElementById('fi').click()">
+    <div class="drop-icon">⊕</div>
+    <div class="drop-label">Drop TTF / OTF font here<br>or click to browse</div>
+    <div class="drop-fname" id="drop-fname"></div>
+    <input type="file" id="fi" accept=".ttf,.otf" style="display:none">
+  </div>
+
+  <div class="params-section">
+    <div class="sec">Parameters
+      <button id="btn-wizard" class="sec-action" onclick="wizOpen()" title="Guided setup: set the design values step by step, looking at type samples">✦ Setup</button>
+      <button id="btn-autoparam" class="sec-action" onclick="autoParam()" title="Auto-detect optimal parameters for the loaded font by scanning Laufweite variance">⚙ AutoParam</button>
+      <select id="preset-params" class="sec-action" onchange="applyParamPreset(this.value)" style="cursor:pointer;padding:2px 5px;font-size:9px;margin-left:0">
+        <option value="">↺ Presets</option>
+        <option value="default">Default</option>
+        <option value="serif-reg">Serif Regular</option>
+        <option value="serif-it">Serif Italic</option>
+        <option value="serif-bold">Serif Bold</option>
+        <option value="serif-boldit">Serif Bold Italic</option>
+        <option value="sans-light">Sans Light</option>
+        <option value="sans-regular">Sans Regular</option>
+        <option value="sans-bold">Sans Bold</option>
+        <option value="slab-light">Slab Light</option>
+        <option value="slab-regular">Slab Regular</option>
+        <option value="slab-bold">Slab Bold</option>
+      </select>
+    </div>
+
+    <div class="pr" data-light="show">
+      <div class="pl" data-tip="Width %&#10;&#10;Scales the target gaps (Base LC/UC) AND the min gap by the same factor.&#10;&#10;Smaller = tighter setting, with more overlap allowed (display).&#10;Larger = looser setting (text).&#10;&#10;Tracking stays separate: it only adds a fixed offset and does not change the overlap limits.&#10;Default: 100">
+        Width % <span style="color:var(--text3);font-style:italic;font-size:9px">(tightness)</span><span>--width · target gap &amp; min gap</span>
+      </div>
+      <input type="number" id="p-width" value="100" min="25" max="300" step="5">
+    </div>
+
+    <div class="pr" data-light="show">
+      <div class="pl" data-tip="Stem gap %&#10;&#10;Stem pairs (HH, nn, ll) have no natural balance point: their distance is a style choice (the classic HHOOHH experiment).&#10;&#10;This slider sets the target gap for stem pairs relative to the round reference (o/O): 100 = same as the round gap, smaller = stems closer, larger = looser.&#10;Full effect on stem+stem, half effect on stem+round.&#10;Default: 100">
+        Stem gap % <span style="color:var(--text3);font-style:italic;font-size:9px">(stem vs. round)</span><span>--stemgap · HH/nn vs. OO/oo</span>
+      </div>
+      <input type="number" id="p-stemgap" value="100" min="25" max="300" step="5">
+    </div>
+
+    <div class="pr" data-light="show">
+      <div class="pl" data-tip="Rhythm (cadence grid)&#10;&#10;Stem+stem pairs snap their stem gap (edge to edge) to the nearest multiple of the cadence tick — the POSITION snaps, not just the kerning value.&#10;&#10;This creates a regular sequence of stems (rhythm) across letter borders. Snapped pairs are marked ♩ in the table; the min gap always wins.&#10;Default: on">
+        Rhythm <span style="color:var(--text3);font-style:italic;font-size:9px">(cadence snap)</span><span>--rhythm · stem gaps snap to grid</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:flex-end;padding-top:4px;">
+        <label class="toggle-sw"><input type="checkbox" id="p-rhythm" checked><span class="toggle-knob"></span></label>
+      </div>
+    </div>
+
+    <div class="pr" data-light="show">
+      <div class="pl" data-tip="Lazy %&#10;&#10;Softens all corrections by this percentage (gentler kerning).&#10;&#10;Deeply open pairs (r· L· T· — detected from the gap profile) are softened up to 40% more: open shapes slow down tightening.&#10;&#10;Min gap is enforced after softening.&#10;Default: 50">
+        Lazy % <span style="color:var(--text3);font-style:italic;font-size:9px">(soften · open pairs +40%)</span><span>--lazy · reduce corrections by %</span>
+      </div>
+      <input type="number" id="p-lazy" value="50" min="0" max="99" step="1">
+    </div>
+
+    <div class="pr" data-light="show">
+      <div class="pl" data-tip="Bias: legible vs. readable&#10;&#10;One slider for the trade-off between legibility (clear separation of shapes) and readability (even rhythm). Replaces the old threshold.&#10;&#10;− (legible): contact model gets stronger (higher beta), min gap grows up to +50%, small tightenings are dropped more freely.&#10;+ (readable): air model gets stronger (lower beta), small loosenings are dropped more freely.&#10;&#10;Dropping: base tolerance 0.3% of UPM, up to 4x wider on the side you care less about. Capped and rhythmic pairs are never dropped.&#10;0 = neutral. Default: 0">
+        Bias <span style="color:var(--text3);font-style:italic;font-size:9px">(legible − · readable +)</span><span>--bias · −100 … +100</span>
+      </div>
+      <input type="number" id="p-bias" value="0" min="-100" max="100" step="10">
+    </div>
+
+    <div class="pr">
+      <div class="pl" data-tip="Min gap % (no touch)&#10;&#10;Minimum ink distance as % of UPM, checked on the raw outline (independent of Smooth/Glow) — as a true 2D distance field: Euclidean minimum distance over fine profiles, so it also catches serif corners and diagonal near-misses between measuring zones.&#10;&#10;Scales with Width; bias towards legible raises it up to +50%.&#10;&#10;0 = off.&#10;Default: 1">
+        Min gap % <span style="color:var(--text3);font-style:italic;font-size:9px">(no touch · 2D)</span><span>--mingap · % of UPM floor</span>
+      </div>
+      <input type="number" id="p-mingap" value="1" min="0" max="100" step="0.5">
+    </div>
+
+    <div class="pr" data-light="show">
+      <div class="pl" data-tip="Round module (cadence)&#10;&#10;Snaps kerning correction values to the nearest multiple of N.&#10;&#10;Pre-filled automatically from the Cadence scan on first font load.&#10;Use 1 for plain integer rounding.&#10;Default: 20">
+        Round module <span style="color:var(--text3);font-style:italic;font-size:9px">(cadence)</span><span>--round · kern snap value</span>
+      </div>
+      <input type="number" id="p-round" value="20" min="1">
+    </div>
+
+    <div class="pr" data-light="show">
+      <div class="pl" data-tip="Pair limit&#10;&#10;Maximum number of kerning pairs to generate, ranked by frequency of occurrence in real-world text (Andre Fuchs corpus).&#10;&#10;Set to 0 to generate all pairs.&#10;Default: 6400">
+        Pair limit <span style="color:var(--text3);font-style:italic;font-size:9px">(top N by frequency)</span><span>--pairs · 0 = all pairs</span>
+      </div>
+      <input type="number" id="p-pairlimit" value="6400" min="0">
+    </div>
+
+    <div class="sec" id="extended-toggle" style="margin-top:4px;cursor:pointer;user-select:none" onclick="toggleExtended()" title="Show/hide extended parameters">Extended <span id="ext-arrow" style="margin-left:auto">▸</span></div>
+    <div id="extended-params" style="display:none">
+
+      <div class="pr">
+        <div class="pl" data-tip="Zones (subtlety)&#10;&#10;Number of equal-height slices spanning the full em height (ascender to descender).&#10;&#10;More zones = finer vertical detail, slower. Recommended: 9–16 for most text fonts.&#10;Default: 16">
+          Zones <span style="color:var(--text3);font-style:italic;font-size:9px">(subtlety)</span><span>--zones · height divisions</span>
+        </div>
+        <input type="number" id="p-zones" value="16" min="1" max="64">
+      </div>
+
+      <div class="pr">
+        <div class="pl" data-tip="Smooth (diagonals and counter)&#10;&#10;Controls how aggressively adjacent zone margins are smoothed. 0 = off, 99 = maximum.&#10;&#10;Tames diagonal strokes and open counters by constraining margin jumps between zones.&#10;Default: 50">
+          Smooth <span style="color:var(--text3);font-style:italic;font-size:9px">(diagonals and counter)</span><span>--smooth · 0=off, 99=max smooth</span>
+        </div>
+        <input type="number" id="p-smooth" value="50" min="0" max="99">
+      </div>
+
+      <div class="pr">
+        <div class="pl" data-tip="Blur (less details)&#10;&#10;Each zone is internally sub-divided into N sub-zones; margins are averaged back into the zone. Prevents staircase artifacts at oblique curve crossings.&#10;Default: 1">
+          Blur <span style="color:var(--text3);font-style:italic;font-size:9px">(less details)</span><span>--blur · sub-zones per zone</span>
+        </div>
+        <input type="number" id="p-blur" value="1" min="1" max="50">
+      </div>
+
+      <div class="pr">
+        <div class="pl" data-tip="Tracking&#10;&#10;Fixed extra distance added to the target gaps (Base LC/UC), after the Width scaling.&#10;&#10;Negative = tighter, positive = looser. Changes the overall spacing without touching the min gap. Expert field — Width covers the normal case.&#10;Default: 0">
+          Tracking <span style="color:var(--text3);font-style:italic;font-size:9px">(additive)</span><span>--tracking · offset on base values</span>
+        </div>
+        <input type="number" id="p-tracking" value="0">
+      </div>
+
+      <div class="pr">
+        <div class="pl" data-tip="Slant angle&#10;&#10;Italic angle in degrees, auto-detected on font load from a stem glyph (l/I/h) at ¼ and ¾ of the x-height.&#10;&#10;De-shears all zone measurements before margin computation.&#10;Default: 0">
+          Slant <span style="color:var(--text3);font-style:italic;font-size:9px">(auto-detected °)</span><span>--slant · italic angle in degrees</span>
+        </div>
+        <input type="number" id="p-slant" value="0" step="0.1" min="-45" max="45">
+      </div>
+
+      <div class="pr">
+        <div class="pl" data-tip="Glow margin mode&#10;&#10;When enabled, computes margins by rasterizing each glyph and measuring opacity-weighted boundaries. Pairs with Glow Blur to simulate optical ink spread.&#10;Default: off">
+          Glow <span style="color:var(--text3);font-style:italic;font-size:9px">(pixel-based)</span><span>--glow · rasterized margins</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:flex-end;padding-top:4px;">
+          <label class="toggle-sw"><input type="checkbox" id="p-glow"><span class="toggle-knob"></span></label>
+        </div>
+      </div>
+
+      <div class="pr">
+        <div class="pl" data-tip="Glow Blur radius (font units)&#10;&#10;Spreads ink opacity outward before margin detection. Higher = softer ink spread → optically wider margins.&#10;Default: 0">
+          Glow Blur <span style="color:var(--text3);font-style:italic;font-size:9px">(ink spread)</span><span>--glowblur · radius in font units</span>
+        </div>
+        <input type="number" id="p-glowblur" value="0" min="0" max="200">
+      </div>
+
+      <div class="pr">
+        <div class="pl" data-tip="Base Glyph LC&#10;&#10;Reference glyph for the LC spacing baseline (self-pair). Change for fonts where &#x27;o&#x27; is atypical.&#10;Default: o">
+          Base Glyph LC <span style="color:var(--text3);font-style:italic;font-size:9px">(reference char)</span><span>--base-lc · char+char pair</span>
+        </div>
+        <input type="text" id="p-baselc" value="o" maxlength="4" style="font-family:var(--mono);font-size:13px;text-align:center;width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);color:var(--text);padding:4px 6px;outline:none;" oninput="this.style.borderColor='var(--accent)'">
+      </div>
+
+      <div class="pr">
+        <div class="pl" data-tip="Base Glyph UC&#10;&#10;Reference glyph for the UC spacing baseline (uppercase + lining figures). Change for fonts where &#x27;O&#x27; is atypical.&#10;Default: O">
+          Base Glyph UC <span style="color:var(--text3);font-style:italic;font-size:9px">(reference char)</span><span>--base-uc · char+char pair</span>
+        </div>
+        <input type="text" id="p-baseuc" value="O" maxlength="4" style="font-family:var(--mono);font-size:13px;text-align:center;width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);color:var(--text);padding:4px 6px;outline:none;" oninput="this.style.borderColor='var(--accent)'">
+      </div>
+
+    </div>
+  </div>
+
+  <div id="light-cadence-row">
+    <canvas id="light-cad-canvas"></canvas>
+    <div id="light-cad-label" style="font-family:var(--mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-top:5px;">n Cadence</div>
+    <input type="number" id="light-cad-val" min="1" readonly style="display:none;" placeholder="—">
+  </div>
+  <div class="prog"><div class="prog-fill" id="prog-fill"></div></div>
+  <button class="btn-run" id="btn-run" disabled onclick="runAnalysis()">▶ Compute Kerning</button>
+  <button id="btn-light-recompute" disabled onclick="guardedAction(runAnalysis)">↺ Recompute</button>
+  <button id="btn-light-clip" disabled onclick="copyKerningToClipboard()">⎘ Kerning to Clipboard</button>
+  <button id="btn-light-act" disabled onclick="exportCSV()">↓ Export CSV</button>
+  <div class="log-resize" id="log-resize"></div>
+  <div class="logbox" id="logbox"></div>
+</div>
+
+<!-- ══ PREVIEW ══ -->
+<div class="preview-panel" id="preview-panel">
+  <div class="ph">
+    <div class="sec">Preview</div>
+    <div class="pcontrols">
+      <label>Size</label>
+      <input type="range" id="psize" min="20" max="300" value="72" oninput="syncSize(this.value);renderPreview()">
+      <input type="number" id="psize-n" value="72" min="10" max="600" style="width:50px" oninput="syncSize(this.value);renderPreview()">
+      <label>px</label>
+    </div>
+  </div>
+
+  <div class="canvas-wrap" id="canvas-wrap">
+    <canvas id="preview-canvas"></canvas>
+  </div>
+
+  <div class="ptextrow">
+    <label>Text</label>
+    <input type="text" id="preview-text" value="AVATAWAVE Coupling" oninput="document.getElementById('preset-select').value='';renderPreview()">
+    <select id="preset-select" onchange="applyPreset(this.value)">
+      <option value="">— presets —</option>
+      <option value="Arrowroot Barley Chervil Dumpling Endive Flaxseed Garbanzo Hijiki Ishtu Jicama Kale Lychee Marjoram Nectarine Oxtail Pizza Quinoa Roquefort Squash Tofu Uppuma Vanilla Wheat Xergis Yogurt Zweiback">AutoParam test string</option>
+      <option value="AVATAWAVE Coupling">Caps pairs · AVATAWAVE</option>
+      <option value="ToVaYouWhXeLyKaRoArDuNeOx">Mix</option>
+      <option value="vrvocpallholbofbofto">UC pairs</option>
+      <option value="DXC+ ComFamToTy ocaleam">Counter paits</option>
+      <option value="ABCDEFGHIJKLMNOPQRSTUVWXYZ">Full uppercase</option>
+      <option value="abcdefghijklmnopqrstuvwxyz">Full lowercase</option>
+      <option value="0123456789">Digits</option>
+      <option value="OHamburgefonstiv">Pangram sample</option>
+      <option value="A man, a plan, a canal: Panama">Sentence test</option>
+      <option value="WAV AV VA AT TA AW WA AY YA FA TF">Diagonal stress</option>
+      <option value="Tight Spacing: fluff cliff staff">Lowercase diagonals</option>
+      <optgroup label="Small Caps">
+        <option value="sc:ABCDEFGHIJKLMNOPQRSTUVWXYZ">SC · Full uppercase</option>
+        <option value="sc:abcdefghijklmnopqrstuvwxyz">SC · Full lowercase</option>
+        <option value="sc:Hamburgefonstiv">SC · Pangram</option>
+        <option value="sc:The Quick Brown Fox">SC · Mixed test</option>
+      </optgroup>
+      <optgroup label="Oldstyle Figures">
+        <option value="osf:0123456789">OSF · All digits</option>
+        <option value="osf:1234 5678 90">OSF · Number groups</option>
+        <option value="osf:Price: 1.234,56 — Year: 2024">OSF · In context</option>
+      </optgroup>
+    </select>
+  </div>
+
+  <div class="trow">
+    <button class="tbtn on-green" id="tbtn-kern" onclick="toggleKern()">⟷ Kerning ON</button>
+    <button class="tbtn" id="tbtn-metrics" onclick="toggleMetrics()">Margins</button>
+    <button class="tbtn" id="tbtn-glow" onclick="toggleGlow()" title="Glow — shows ink spread zone used for Glow margin computation">Glow</button>
+    <button class="tbtn" id="tbtn-baseline" onclick="toggleBaseline()">Baseline</button>
+    <button class="tbtn" id="tbtn-xheight" onclick="toggleXheight()">x-Height</button>
+    <button class="tbtn" id="tbtn-sc" onclick="toggleSmallCaps()" title="Show Small Capitals glyphs">Small Caps</button>
+    <button class="tbtn" id="tbtn-osf" onclick="toggleOSF()" title="Show Oldstyle Figures">OSF</button>
+  </div>
+</div>
+
+<!-- ══ TABLE + SPACING CORRECTIONS ══ -->
+<div class="results-panel">
+  <div class="rh">
+    <div class="tab-btns">
+      <button class="tab-btn active" id="tab-kern" onclick="switchTab('kern')">Coupling Table</button>
+      <button class="tab-btn" id="tab-spacing" onclick="switchTab('spacing')">Spacing Corrections</button>
+      <button class="tab-btn" id="tab-cadence" onclick="switchTab('cadence')">Cadence</button>
+      <button class="tab-btn" id="tab-equi" onclick="switchTab('equi')" title="Triple equilibrium: does the middle glyph look centered between its neighbors?">Equilibrium</button>
+    </div>
+    <div class="filter-group" id="kern-filter-group">
+      <span class="rx-err" id="rx-err"></span>
+      <input type="text" class="search-box" id="search-box" placeholder="Filter… (exact, A B = pair, .* regex)" oninput="filterTable()">
+      <button class="filter-mode" id="rx-btn" onclick="toggleRegex()" title="Toggle regex mode">.*</button>
+      <button id="pair-preview-btn" class="tbtn" onclick="togglePairPreview()" title="Toggle pair preview mode (also: Esc)">⊙ Pair</button>
+      <button class="btn-exp" onclick="exportCSV()">↓ Export</button>
+    </div>
+    <div class="filter-group" id="spacing-filter-group" style="display:none">
+      <button class="btn-exp" id="btn-apply-spacing" onclick="applySpacingToGlyphs()" style="display:none">⊙ Apply Spacing</button>
+    </div>
+    <div class="filter-group" id="cadence-filter-group" style="display:none"></div>
+    <div class="filter-group" id="equi-filter-group" style="display:none"></div>
+  </div>
+  <div class="tbl-wrap" id="kern-panel">
+    <div class="empty" id="empty-state">
+      <div class="eico">⊘</div>
+      <div>Load a font to get started</div>
+    </div>
+    <table id="results-table" style="display:none">
+      <thead><tr>
+        <th onclick="sortBy('left')">Left</th>
+        <th onclick="sortBy('right')">Right</th>
+        <th onclick="sortBy('correction')">Correction</th>
+        <th onclick="sortBy('mean')">Pair Mean</th>
+        <th onclick="sortBy('base')">Base</th>
+        <th onclick="sortBy('beta')" title="Contact character: 0 = air (mean gap), 1 = contact (closest point)">β</th>
+        <th>Class</th>
+        <th title="Zone values — hover row for details">Zones</th>
+      </tr></thead>
+      <tbody id="results-tbody"></tbody>
+    </table>
+  </div>
+  <div class="tbl-wrap" id="spacing-panel" style="display:none;flex-direction:column">
+    <div class="empty" id="spacing-empty">
+      <div class="eico">⊙</div>
+      <div>Compute kerning to see spacing corrections</div>
+    </div>
+    <div id="spacing-content" style="display:none;flex:1;min-height:0;flex-direction:row;gap:0;overflow:hidden">
+      <div id="spacing-histogram" style="width:280px;flex-shrink:0;overflow-y:auto;border-right:1px solid var(--border);padding:0 8px"></div>
+      <div style="flex:1;min-width:0;overflow:auto">
+        <table id="spacing-table">
+          <thead><tr>
+            <th>Glyph</th>
+            <th>Cls</th>
+            <th title="Current advance width">Old AW</th>
+            <th title="New advance width rounded to module">New AW</th>
+            <th title="Net advance width change">Δ AW</th>
+            <th title="Left margin correction vs base glyph">Δ Left</th>
+            <th title="Right margin correction vs base glyph">Δ Right</th>
+            <th title="New computed left margin">New L</th>
+            <th title="New computed right margin">New R</th>
+          </tr></thead>
+          <tbody id="spacing-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <!-- ── Equilibrium panel (F) ── -->
+  <div class="tbl-wrap" id="equi-panel" style="display:none;flex-direction:column">
+    <div class="empty" id="equi-empty">
+      <div class="eico">⚖</div>
+      <div>Compute kerning to see triple equilibrium</div>
+    </div>
+    <div id="equi-content" style="display:none;flex:1;min-height:0;overflow:auto">
+      <div id="equi-summary" style="padding:10px 12px;font-family:var(--mono);font-size:10px;line-height:1.6;color:var(--text2);border-bottom:1px solid var(--border)"></div>
+      <table id="equi-table">
+        <thead><tr>
+          <th>Triple</th>
+          <th title="Optical white space left of the middle glyph (mean gap + kerning)">Gap left</th>
+          <th title="Optical white space right of the middle glyph (mean gap + kerning)">Gap right</th>
+          <th title="Equilibrium error: |left − right|">Δ (fu)</th>
+          <th title="Δ relative to UPM">Δ %UPM</th>
+        </tr></thead>
+        <tbody id="equi-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <!-- ── Cadence panel ── -->
+  <div id="cadence-panel" style="display:none;flex:1;min-height:0;flex-direction:row">
+    <div id="cadence-ctrl">
+      <div class="cad-field">
+        <span class="cad-lbl">Equator</span>
+        <input class="cad-val" id="cad-equator" type="number" step="1" oninput="cadInput('eq')">
+      </div>
+      <div class="cad-field">
+        <span class="cad-lbl">Left</span>
+        <input class="cad-val ro" id="cad-left" type="number" readonly tabindex="-1">
+      </div>
+      <div class="cad-field">
+        <span class="cad-lbl">Right</span>
+        <input class="cad-val ro" id="cad-right" type="number" readonly tabindex="-1">
+      </div>
+      <div class="cad-field">
+        <span class="cad-lbl">Stem</span>
+        <input class="cad-val" id="cad-stem" type="number" step="1" oninput="cadInput('stem')">
+      </div>
+      <div class="cad-field">
+        <span class="cad-lbl">Interval</span>
+        <input class="cad-val" id="cad-interval" type="number" step="1" oninput="cadInput('interval')">
+      </div>
+      <div class="cad-field">
+        <span class="cad-lbl">Divider</span>
+        <input class="cad-val" id="cad-divider" type="number" step="1" min="1" value="4" oninput="cadInput('div')">
+      </div>
+      <div class="cad-field">
+        <span class="cad-lbl">Step</span>
+        <input class="cad-val" id="cad-step" type="number" step="1" oninput="cadInput('step')">
+      </div>
+      <div class="cad-field">
+        <span class="cad-lbl">Cadence</span>
+        <input class="cad-val ro" id="cad-cadence" type="number" readonly tabindex="-1">
+      </div>
+      <button class="btn-hdr accent" style="margin-top:6px;width:100%;font-size:9px;padding:5px 4px" onclick="cadAssignPreset()">⊙ Assign to Preset</button>
+    </div>
+    <div id="cadence-wrap" style="flex:1;min-width:0;position:relative;overflow:hidden">
+      <canvas id="cadence-canvas" style="position:absolute;top:0;left:0"></canvas>
+    </div>
+  </div>
+</div>
+
+</div><!-- /layout -->
+
+<script src="fuchs.js"></script>
+<script>
+%%SCRIPTS%%
+</script>
+</body>
+</html>

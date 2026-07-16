@@ -1,0 +1,106 @@
+// Non-zero pairs to output, capped to pairlimit (0 = all), in fuchs order.
+function outputPairs(){
+  const p=P();
+  const nz=kerningData.filter(d=>d.correction!==0);
+  return p.pairlimit>0?nz.slice(0,p.pairlimit):nz;
+}
+
+// Human-readable parameter summary — CSV/copy header and Glyphs run documentation.
+// Lists every menu parameter; smooth is reported as the menu value (P() stores it inverted).
+function paramSummary(p){
+  const smoothMenu=p.smooth===0?0:Math.round((1-p.smooth)*100);
+  return `zones=${p.zones} smooth=${smoothMenu}% blur=${p.blur} round=${p.round} mingap=${Math.round(p.mingap*100)}% bias=${p.bias} lazy=${p.lazy} width=${p.width}% stemgap=${p.stemgap}% rhythm=${p.rhythm?'on':'off'} tracking=${p.tracking} glow=${p.glow?'on':'off'} glowblur=${p.glowblur} slant=${p.slant} pairlimit=${p.pairlimit} base=${p.baselc}/${p.baseuc}`;
+}
+
+// Send non-zero pairs to Python for application to the font.
+function applyToGlyphs(){
+  if(isComputing){pendingAction=()=>applyToGlyphs();log('⏳ Apply queued — waiting for computation to finish','info');return;}
+  if(!kerningData.length){alert('No kerning data — run Compute first.');return;}
+  const out=outputPairs();
+  if(!out.length){alert('All corrections are zero — nothing to apply.');return;}
+  const pairs=out.map(d=>({left:d.left,right:d.right,correction:d.correction}));
+  // Params ride along so Python can document the run in Font Info (master
+  // custom parameter + appended note). plugin.py also accepts a bare array.
+  const payload={pairs,params:paramSummary(P())};
+  window.location.href='kerntrip://applykerning?'+encodeURIComponent(JSON.stringify(payload));
+}
+
+// Called by Python after applying kerning.
+function showApplyResult(result){
+  log(result.msg, result.ok>0?'ok':'err');
+  setStatus(result.msg, result.ok>0?'active':'error');
+}
+
+function applySpacingToGlyphs(){
+  if(!IS_GLYPHS){return;}
+  const gks=Object.keys(glyphCache);
+  if(!gks.length){alert('No spacing data — run Compute first.');return;}
+  const p=P();
+  const trk=p.tracking/2;
+  const baseLcGC=glyphCache[p.baselc],baseUcGC=glyphCache[p.baseuc];
+  // Zone range of each base glyph: botZ = lower ink boundary, topZ = upper ink boundary
+  const lcBotZ=baseLcGC?botZoneOf(baseLcGC):null, lcTopZ=baseLcGC?topZoneOf(baseLcGC):null;
+  const ucBotZ=baseUcGC?botZoneOf(baseUcGC):null, ucTopZ=baseUcGC?topZoneOf(baseUcGC):null;
+  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+trk:null;
+  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+trk:null;
+  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+trk:null;
+  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+trk:null;
+  const items=[];
+  for(const gk of gks){
+    const gc=glyphCache[gk];
+    if(!gc)continue;
+    const isUC=gc.cls==='UC';
+    const botZ=isUC?ucBotZ:lcBotZ, topZ=isUC?ucTopZ:lcTopZ;
+    const bL=isUC?baseUcL:baseLcL,bR=isUC?baseUcR:baseLcR;
+    if(bL===null||bR===null||botZ===null||topZ===null)continue;
+    const gL=avgMarginZones(gc.left,botZ,topZ),gR=avgMarginZones(gc.right,botZ,topZ);
+    if(gL===null||gR===null)continue;
+    const dL=rtm(bL-gL,p.round);
+    const dR=rtm(bR-gR,p.round);
+    const newAW=rtm(gc.advanceWidth+dL+dR,p.round);
+    const dWidth=newAW-gc.advanceWidth-dL;
+    items.push({name:gc.glyphName,dlsb:dL,dwidth:dWidth});
+  }
+  if(!items.length){alert('No adjustments to apply.');return;}
+  window.location.href='kerntrip://applyspacing?'+encodeURIComponent(JSON.stringify(items));
+}
+
+function showSpacingApplyResult(result){
+  log(result.msg, result.ok>0?'ok':'err');
+  setStatus(result.msg, result.ok>0?'active':'error');
+}
+
+// ── EXPORT ────────────────────────────────────────────
+function exportCSV(){
+  if(isComputing){pendingAction=()=>exportCSV();log('⏳ Export queued — waiting for computation to finish','info');return;}
+  if(IS_GLYPHS){applyToGlyphs();return;}
+  if(!kerningData.length){alert('No data to export.');return;}
+  const p=P();
+  const out=outputPairs();
+  const lines=[
+    `# KernTrip — Font Kerning | ${fontName} | ${paramSummary(p)}`,
+    `# Format: Left;Right;Correction (Class zones)`,
+    ...out.map(d=>`${d.left};${d.right};${d.correction} (${d.tag} ${d.zones})${d.capped?' [cap]':''}${d.rhythmic?' [rhythm]':''}`)
+  ];
+  const blob=new Blob([lines.join('\n')],{type:'text/plain'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=fontName.replace(/\.[^.]+$/,'')+'.csv';a.click();
+}
+function copyKerningToClipboard(){
+  if(isComputing){pendingAction=()=>copyKerningToClipboard();log('⏳ Copy queued — waiting for computation to finish','info');return;}
+  if(!kerningData.length){return;}
+  const p=P();
+  const out=outputPairs();
+  const lines=[
+    `# KernTrip — Font Kerning | ${fontName} | ${paramSummary(p)}`,
+    `# Format: Left;Right;Correction (Class zones)`,
+    ...out.map(d=>`${d.left};${d.right};${d.correction} (${d.tag} ${d.zones})${d.capped?' [cap]':''}${d.rhythmic?' [rhythm]':''}`)
+  ];
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>{
+    const b=document.getElementById('btn-light-clip');
+    if(b){const orig=b.textContent;b.textContent='✓ Copied!';setTimeout(()=>{b.textContent=orig;},1400);}
+    log(`Copied ${out.length.toLocaleString()} kerning pairs to clipboard`,'ok');
+  }).catch(()=>log('Clipboard write failed','err'));
+}
+
+if(typeof module!=='undefined')module.exports={outputPairs,paramSummary,applyToGlyphs,showApplyResult,applySpacingToGlyphs,showSpacingApplyResult,exportCSV,copyKerningToClipboard};
