@@ -33,36 +33,17 @@ function showApplyResult(result){
 
 function applySpacingToGlyphs(){
   if(!IS_GLYPHS){return;}
-  const gks=Object.keys(glyphCache);
-  if(!gks.length){alert('No spacing data — run Compute first.');return;}
-  const p=P();
-  const trk=p.tracking/2;
-  const baseLcGC=glyphCache[p.baselc],baseUcGC=glyphCache[p.baseuc];
-  // Zone range of each base glyph: botZ = lower ink boundary, topZ = upper ink boundary
-  const lcBotZ=baseLcGC?botZoneOf(baseLcGC):null, lcTopZ=baseLcGC?topZoneOf(baseLcGC):null;
-  const ucBotZ=baseUcGC?botZoneOf(baseUcGC):null, ucTopZ=baseUcGC?topZoneOf(baseUcGC):null;
-  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+trk:null;
-  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+trk:null;
-  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+trk:null;
-  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+trk:null;
-  const items=[];
-  for(const gk of gks){
-    const gc=glyphCache[gk];
-    if(!gc)continue;
-    const isUC=gc.cls==='UC';
-    const botZ=isUC?ucBotZ:lcBotZ, topZ=isUC?ucTopZ:lcTopZ;
-    const bL=isUC?baseUcL:baseLcL,bR=isUC?baseUcR:baseLcR;
-    if(bL===null||bR===null||botZ===null||topZ===null)continue;
-    const gL=avgMarginZones(gc.left,botZ,topZ),gR=avgMarginZones(gc.right,botZ,topZ);
-    if(gL===null||gR===null)continue;
-    const dL=rtm(bL-gL,p.round);
-    const dR=rtm(bR-gR,p.round);
-    const newAW=rtm(gc.advanceWidth+dL+dR,p.round);
-    const dWidth=newAW-gc.advanceWidth-dL;
-    items.push({name:gc.glyphName,dlsb:dL,dwidth:dWidth});
-  }
+  if(!Object.keys(glyphCache).length){alert('No spacing data — run Compute first.');return;}
+  // Shared spacing rows (09): base glyph centered, offset inherited,
+  // negative sidebearings clamped to 0. dwidth is applied width-first in
+  // Python (RSB shifts by dwidth, then LSB by dlsb keeping RSB).
+  const rows=computeSpacingRows();
+  const items=rows.map(r=>({name:r.gc.glyphName,dlsb:r.dL,dwidth:r.newAW-r.oldAW-r.dL}));
   if(!items.length){alert('No adjustments to apply.');return;}
-  window.location.href='kerntrip://applyspacing?'+encodeURIComponent(JSON.stringify(items));
+  // unit rides along so Python sets the master's unitizerUnit custom
+  // parameter to the module value. plugin.py also accepts a bare array.
+  const payload={items,unit:P().round};
+  window.location.href='kerntrip://applyspacing?'+encodeURIComponent(JSON.stringify(payload));
 }
 
 function showSpacingApplyResult(result){

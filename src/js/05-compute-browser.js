@@ -149,6 +149,14 @@ async function runAnalysis(){
     }
     log(`Params: zones=${p.zones} smooth=${document.getElementById('p-smooth').value} blur=${p.blur} round=${p.round} mingap=${Math.round(p.mingap*100)}% bias=${p.bias} tracking=${p.tracking} baseLc=${p.baselc} baseUc=${p.baseuc} pairlimit=${p.pairlimit||'all'} slant=${document.getElementById('p-slant').value||0}°`,'info');
 
+    // space/nbspace: no outline, so the margin loop below skips them —
+    // resolve name + current advance width directly for Spacing Corrections
+    spaceGlyphInfo={sp:null,nbsp:null};
+    for(const[key,ch]of[['sp',' '],['nbsp','\u00A0']]){
+      const g=fontObj.charToGlyph(ch);
+      if(g&&g.name&&g.name!=='.notdef')spaceGlyphInfo[key]={name:g.name,advanceWidth:g.advanceWidth||0};
+    }
+
     // Step 1: margins — all glyphs in font (allowedChars filter only used for pair building)
     const allKeys=Object.keys(fontObj.glyphs.glyphs);
     let done=0;
@@ -249,6 +257,7 @@ async function runAnalysis(){
   updateCadenceField();
   afterCompute();
   if(typeof wizMaybeAutoOpen==='function')wizMaybeAutoOpen();
+  if(typeof apAfterAnalysis==='function')apAfterAnalysis();
 }
 
 if(typeof module!=='undefined')module.exports={measureStemCadence,loadFont,initLoadAndCompute,runAnalysis};

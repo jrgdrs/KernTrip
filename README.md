@@ -20,9 +20,9 @@ You may test it live in your Browser now and without any further installations.
 
 https://jrgdrs.github.io/KernTrip/
 
-## Install in Glyxphs
+## Install in Glyphs
 
-Download from https://jrgdrs.github.io/KernTrip/KernTrip.zip , unzip and doubleclick onto the Plugin to install it into Glyphs 3 (not 3 nor 4 ;-). You find the call KernTrip in the Scrpts menu.
+Download from https://jrgdrs.github.io/KernTrip/KernTrip.zip , unzip and doubleclick onto the Plugin to install it into Glyphs 3 (not version 2 but version 4 preview works also ;-). You find the call KernTrip in the Scrpts menu.
 
 ## Build by yourself
 

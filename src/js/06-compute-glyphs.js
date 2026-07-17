@@ -58,6 +58,8 @@ function receiveGlyphData(data){
     glyphsByName[g.name] = g;
     if(g.unicode != null) unicodeToGlyphName[g.unicode] = g.name;
   }
+  // space/nbspace: no outline, sent separately by Python (_send_glyph_data_inner)
+  spaceGlyphInfo={sp:data.spaceGlyphs?.sp||null,nbsp:data.spaceGlyphs?.nbsp||null};
   const info = document.getElementById('header-font-info');
   if(info) info.innerHTML=`<strong>${esc(data.fontName)}</strong>&nbsp; Master:&nbsp;${esc(data.masterName)}&nbsp; UPM:${data.upm}`;
   const fname=document.getElementById('drop-fname');
@@ -277,6 +279,7 @@ async function runAnalysisFromGlyphsData(data){
   updateCadenceField();
   afterCompute();
   if(typeof wizMaybeAutoOpen==='function')wizMaybeAutoOpen();
+  if(typeof apAfterAnalysis==='function')apAfterAnalysis();
 }
 
 if(typeof module!=='undefined')module.exports={setLoadProgress,dbg,beginGlyphData,appendGlyphChunk,finalizeGlyphData,receiveGlyphData,computeMarginsFromCommands,commandsToPath2D,runAnalysisFromGlyphsData};

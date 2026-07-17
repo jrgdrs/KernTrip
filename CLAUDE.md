@@ -96,15 +96,21 @@ The whole pair formula lives ONCE in `pairCorrCore` + `buildPairCtx` +
    raises the min gap up to +50% towards legible, and drops small corrections
    cost-based (base tolerance 0.3% of UPM, up to 4x wider on the disfavored
    side; never on capped/rhythmic pairs). The threshold parameter is gone
-   everywhere (AutoParam scans 7 parameters; space pairs in `04-analysis`
-   use the 0.3% noise floor).
+   everywhere (AutoParam runs automatically after font load and scans
+   smooth/blur/mingap — zones fixed at 16 — in 5 range steps over
+   coarse-to-fine rounds until max triple-equilibrium Δ < 10 fu (max 6
+   rounds), keeps the value with the lowest max Δ, documents the result —
+   timestamp · max-equilibrium · palette parameters — in Font Info → Notes
+   via `kerntrip://note`, then opens the setup assistant; space pairs in
+   `04-analysis` use the 0.3% noise floor).
 
 **Slant detection on stem glyphs** (l/I/h, not "o", in 05/06): humanist
 o axes (Centenary: 12.5°!) would otherwise be read as an italic angle and
 break the stem detection.
 
 **Setup assistant** (`16-wizard.js`, "Setup" button; opens automatically
-after font load, can be turned off via localStorage `kerntripWizAuto`):
+after load → AutoParam (`apAfterAnalysis` in 14 calls `wizOpen`), can be
+turned off via localStorage `kerntripWizAuto`):
 measured values are collected automatically; the five design values
 (width · stem gap+rhythm · bias · lazy · min gap) are set step by step on
 type samples — 3 clickable variants per step (optician principle) plus a

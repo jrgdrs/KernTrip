@@ -27,6 +27,10 @@ let selectedPairIdx=-1;  // index into filteredData for pair-click preview
 let pairPreviewMode=false;  // true when showing a clicked pair in preview
 let baseValueLC=0,baseValueUC=0;
 let currentUPM=1000,yBotGlobal=0,yTopGlobal=0,xHeightGlobal=0;
+// space/nbspace have no outline (skipped from glyphCache) — their glyph
+// name + current advance width are collected separately so Spacing
+// Corrections can size them off "i" (09-spacing.js). {name,advanceWidth}|null
+let spaceGlyphInfo={sp:null,nbsp:null};
 
 // Glyphs mode state
 let glyphsByName={};         // name → {commands, advanceWidth, unicode} (Glyphs mode)

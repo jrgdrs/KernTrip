@@ -1,10 +1,35 @@
-// ── SPACING CORRECTIONS TABLE ──────────────────────────
+// ── SPACING CORRECTIONS ────────────────────────────────
 /**
- * For each glyph, find its self-pair correction (A+A, n+n, etc.)
- * Then compute suggested spacing adjustments:
- *   - ΔAdvanceWidth: half the self-kern correction (split symmetrically)
- *   - ΔSidebearing: quarter of the self-kern (shift glyph inside bounds)
- *   Net effect: if applied, the self-pair kern approaches zero.
+ * Target margins per class come from the base glyphs (o/O). Five rules:
+ *   1. The base glyph itself is centered: LSB = RSB (exact, no module
+ *      rounding), advance width unchanged. "LSB/RSB" here means the ink
+ *      extent at half the x-height (halfXhSB), not the true geometric
+ *      minimum — that avoids letting serifs (near baseline/cap-height)
+ *      or hooks/overshoots skew what should be a stem-width reading.
+ *   2. Its centering offset shifts the class targets, so every other
+ *      glyph inherits the same offset and keeps fitting the base.
+ *   3. Sidebearings never go negative: the negative side is pinned at 0
+ *      and the advance width rounds UP to the next module width (< 1
+ *      module unit added in total); the remaining slack is distributed
+ *      across the bearings in proportion to their computed widths. This
+ *      is the true-minimum (geomSB) check — unlike rule 1/4, it must see
+ *      the real outline, serifs and hooks included, or it would let ink
+ *      actually overlap.
+ *   4. Narrow glyphs (resulting width from rules 2/3 < half of "n"): the
+ *      width itself is examined FIRST and never recomputed — only the
+ *      already-decided dL/dR split is redistributed, using halfXhSB
+ *      (same stem-width reading as rule 1), so LSB == RSB within that
+ *      fixed width. If a deep localized overhang elsewhere (e.g. a
+ *      descender hook) would then go negative at the TRUE minimum
+ *      (geomSB), the deficit shifts to the other side, same width — a
+ *      correctness backstop, not the old "skip if under one module"
+ *      guard: it only engages on an actual negative bound and never
+ *      reverts to the rules 2/3 split wholesale.
+ *   5. space/nbspace have no ink (no margins, excluded from the loop
+ *      above) — they simply take the advance width of "i" (picks up
+ *      rule 4's centering if "i" itself qualifies as narrow).
+ * computeSpacingRows() is the single source — table (renderSpacingTable)
+ * and Apply Spacing (07) both consume its rows.
  */
 function avgMargin(arr){
   let sum=0,cnt=0;
@@ -30,25 +55,64 @@ function botZoneOf(gc){
   return 0;
 }
 
-function showSpacingContent(show){
-  const empty=document.getElementById('spacing-empty');
-  const content=document.getElementById('spacing-content');
-  if(show){empty.style.display='none';content.style.display='flex';}
-  else{empty.style.display='flex';content.style.display='none';}
+// Geometric sidebearing: minimum of the fine profile (per convention the
+// geometric data, never the smoothed/glow arrays). Negative for overhangs.
+function geomSB(arr){
+  if(!arr)return null;
+  let m=null;
+  for(const v of arr)if(v!==null&&(m===null||v<m))m=v;
+  return m;
 }
 
-function renderSpacingTable(){
+// Nearest non-null fine-profile row to idx (outward search) — a stem
+// glyph's sample row at exactly half x-height is essentially never empty,
+// but this guards degenerate/very short glyphs.
+function nearestNonNull(arr,idx){
+  if(arr[idx]!==null)return arr[idx];
+  for(let d=1;d<arr.length;d++){
+    if(idx-d>=0&&arr[idx-d]!==null)return arr[idx-d];
+    if(idx+d<arr.length&&arr[idx+d]!==null)return arr[idx+d];
+  }
+  return null;
+}
+// Left/right ink extent sampled at half the x-height — a clean stem-width
+// reading, away from serifs (which sit at baseline/x-height/cap-height)
+// and hooks/overshoots (descenders, bowls) that would skew the true
+// geometric minimum (geomSB) used for centering. x-height falls back to
+// 55% of the em (same estimate used for slant auto-detection) when the
+// font provides none.
+function halfXhSB(gc){
+  const l=gc.leftFine??gc.leftGeom,r=gc.rightFine??gc.rightGeom;
+  if(!l||!r||!l.length)return{l:null,r:null};
+  const rowH=(yTopGlobal-yBotGlobal)/l.length;
+  if(rowH<=0)return{l:null,r:null};
+  const xh=(IS_GLYPHS?xHeightGlobal:(fontObj?.tables?.os2?.sxHeight||0))||Math.round((yTopGlobal-yBotGlobal)*0.55);
+  let idx=Math.floor((xh/2-yBotGlobal)/rowH);
+  idx=Math.max(0,Math.min(l.length-1,idx));
+  return{l:nearestNonNull(l,idx),r:nearestNonNull(r,idx)};
+}
+
+// One row per glyph — shared by the table and Apply Spacing.
+function computeSpacingRows(){
   const gks=Object.keys(glyphCache);
-  if(!gks.length){showSpacingContent(false);return;}
+  if(!gks.length)return[];
   const p=P();
-  const baseLcGC=glyphCache[p.baselc],baseUcGC=glyphCache[p.baseuc];
   const trk=p.tracking/2; // tracking split equally across left and right margin targets
+  const baseLcGC=glyphCache[p.baselc],baseUcGC=glyphCache[p.baseuc];
   const lcBotZ=baseLcGC?botZoneOf(baseLcGC):null, lcTopZ=baseLcGC?topZoneOf(baseLcGC):null;
   const ucBotZ=baseUcGC?botZoneOf(baseUcGC):null, ucTopZ=baseUcGC?topZoneOf(baseUcGC):null;
-  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+trk:null;
-  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+trk:null;
-  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+trk:null;
-  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+trk:null;
+  // centering offset per base glyph: shift that equalizes its half-x-height
+  // ink extent — folded into the class targets so all glyphs inherit it
+  const sbOff=gc=>{
+    if(!gc)return 0;
+    const s=halfXhSB(gc);
+    return s.l===null||s.r===null?0:(s.r-s.l)/2;
+  };
+  const sLc=sbOff(baseLcGC),sUc=sbOff(baseUcGC);
+  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+trk+sLc:null;
+  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+trk-sLc:null;
+  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+trk+sUc:null;
+  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+trk-sUc:null;
 
   const rows=[];
   for(const gk of gks){
@@ -60,15 +124,103 @@ function renderSpacingTable(){
     if(bL===null||bR===null||botZ===null||topZ===null)continue;
     const gL=avgMarginZones(gc.left,botZ,topZ),gR=avgMarginZones(gc.right,botZ,topZ);
     if(gL===null||gR===null)continue;
-    const dL=rtm(bL-gL,p.round);
-    const dR=rtm(bR-gR,p.round);
+    const isBase=gc===baseLcGC||gc===baseUcGC;
     const oldAW=gc.advanceWidth;
-    const newAW=rtm(oldAW+dL+dR,p.round);
+    let dL,dR,newAW;
+    if(isBase){
+      // exact centering: LSB = RSB afterwards, module rounding would break it
+      const s=isUC?sUc:sLc;
+      dL=Math.round(trk+s);dR=Math.round(trk-s);
+      newAW=oldAW+dL+dR;
+    }else{
+      dL=rtm(bL-gL,p.round);
+      dR=rtm(bR-gR,p.round);
+      newAW=rtm(oldAW+dL+dR,p.round);
+      const lsb=geomSB(gc.leftFine??gc.leftGeom),rsb=geomSB(gc.rightFine??gc.rightGeom);
+      const clampL=lsb!==null&&lsb+dL<0;
+      const clampR=rsb!==null&&rsb+(newAW-oldAW-dL)<0;
+      if(clampL||clampR){
+        // Negative sidebearings never reach the output: the negative side is
+        // pinned at 0 and the advance width stays on the module grid — the
+        // NEXT module width up (smaller would push a bearing negative again),
+        // so at most one module unit is added. The remaining slack is split
+        // across the bearings ∝ the previously computed bearing widths:
+        // the pinned side (width 0) gets nothing and stays exactly 0.
+        const dLx=clampL?-lsb:dL, dRx=clampR?-rsb:dR;
+        const exact=oldAW+dLx+dRx;
+        const mod=Math.max(1,p.round);
+        newAW=Math.ceil(exact/mod-1e-9)*mod;
+        const slack=newAW-exact;
+        const sideL=Math.max(0,(lsb??0)+dLx), sideR=Math.max(0,(rsb??0)+dRx);
+        const propL=sideL+sideR>0?sideL/(sideL+sideR):0.5;
+        dL=Math.round(dLx+slack*propL);
+        dR=Math.round(newAW-oldAW-dL); // effective right correction
+      }
+    }
     const dAW=newAW-oldAW;
-    const newL=r1(gL+dL);
-    const newR=r1(gR+dR);
-    rows.push({gk,gc,oldAW,newAW,dAW,dL,dR,newL,newR});
+    rows.push({gk,gc,oldAW,newAW,dAW,dL,dR,newL:r1(gL+dL),newR:r1(gR+dR)});
   }
+
+  // Narrow glyphs (period, comma, dots, j …): first examine the RESULTING
+  // width rules 2/3 already settled on (module grid, negative-bearing
+  // clamp already applied) — only if that width is under half of "n" do
+  // we then improve the ALIGNMENT within it. The width itself is never
+  // recomputed here: dL/dR are redistributed (their sum, and so newAW,
+  // stays exactly what rules 2/3 decided) so LSB == RSB, using halfXhSB
+  // (stem-width reading, not the true geometric minimum — see rule 1)
+  // so a descender hook like on "j" can't skew the split. Needs the full
+  // "n" row, so this runs as a second pass over the already-built rows
+  // (build order is unreliable).
+  const nRow=rows.find(r=>r.gc.charLabel==='n');
+  if(nRow){
+    for(const r of rows){
+      if(r.gc.cls==='SP'||r.gc===baseLcGC||r.gc===baseUcGC)continue;
+      if(r.newAW>=nRow.newAW/2)continue;
+      const s=halfXhSB(r.gc);
+      if(s.l===null||s.r===null)continue;
+      const widthDelta=r.newAW-r.oldAW; // fixed — the resulting width, decided above, is never touched
+      const sumSlack=s.l+s.r+widthDelta; // curLSB+curRSB at that fixed width, independent of the L/R split
+      let dL=Math.round(sumSlack/2)-s.l;
+      let dR=widthDelta-dL;              // derived, so dL+dR stays exactly widthDelta
+      // Centering reads the clean stem (halfXhSB), so it can land a split
+      // that a deep localized overhang elsewhere (e.g. a descender hook)
+      // would push past zero at the TRUE minimum (geomSB) — shift the
+      // deficit to the other side, same width, rather than letting ink
+      // actually overlap. Unlike the removed guard this never reverts the
+      // whole centering attempt, it only engages on a real negative bound.
+      const trueL=geomSB(r.gc.leftFine??r.gc.leftGeom),trueR=geomSB(r.gc.rightFine??r.gc.rightGeom);
+      if(trueL!==null&&trueL+dL<0){const deficit=-(trueL+dL);dL+=deficit;dR-=deficit;}
+      if(trueR!==null&&trueR+dR<0){const deficit=-(trueR+dR);dR+=deficit;dL-=deficit;}
+      r.dL=dL;r.dR=dR;r.newL=r1(s.l+dL);r.newR=r1(s.r+dR);
+      // r.newAW / r.dAW intentionally untouched — only the L/R split moves
+    }
+  }
+
+  // space & nbspace: no ink, so they never enter the loop above (no left/
+  // right margins). Instead they take the same advance width as "i" — the
+  // whole delta is a pure width change, no sidebearing to shift.
+  const iRow=rows.find(r=>r.gc.charLabel==='i');
+  if(iRow){
+    for(const key of['sp','nbsp']){
+      const info=spaceGlyphInfo[key];
+      if(!info)continue;
+      const oldAW=info.advanceWidth,newAW=iRow.newAW,dAW=newAW-oldAW;
+      rows.push({gk:'__'+key,gc:{charLabel:info.name,cls:'SP',glyphName:info.name},oldAW,newAW,dAW,dL:0,dR:dAW,newL:null,newR:null});
+    }
+  }
+  return rows;
+}
+
+function showSpacingContent(show){
+  const empty=document.getElementById('spacing-empty');
+  const content=document.getElementById('spacing-content');
+  if(show){empty.style.display='none';content.style.display='flex';}
+  else{empty.style.display='flex';content.style.display='none';}
+}
+
+function renderSpacingTable(){
+  if(!Object.keys(glyphCache).length){showSpacingContent(false);return;}
+  const rows=computeSpacingRows();
 
   if(!rows.length){
     showSpacingContent(false);
@@ -106,10 +258,10 @@ function renderSpacingTable(){
   for(const r of rows){
     const tr=document.createElement('tr');
     const cls=r.gc.cls==='UC'?'tuc':'tlc';
-    tr.innerHTML=`<td class="cc">${esc(r.gc.charLabel)}</td><td class="${cls}">${r.gc.cls}</td><td>${r.oldAW}</td><td style="font-weight:700">${r.newAW}</td><td class="${r.dAW<0?'vneg':r.dAW>0?'vpos':'vzero'}">${fmt(r.dAW)}</td><td class="${r.dL<0?'vneg':r.dL>0?'vpos':'vzero'}">${fmt(r.dL)}</td><td class="${r.dR<0?'vneg':r.dR>0?'vpos':'vzero'}">${fmt(r.dR)}</td><td>${r.newL}</td><td>${r.newR}</td>`;
+    tr.innerHTML=`<td class="cc">${esc(r.gc.charLabel)}</td><td class="${cls}">${r.gc.cls}</td><td>${r.oldAW}</td><td style="font-weight:700">${r.newAW}</td><td class="${r.dAW<0?'vneg':r.dAW>0?'vpos':'vzero'}">${fmt(r.dAW)}</td><td class="${r.dL<0?'vneg':r.dL>0?'vpos':'vzero'}">${fmt(r.dL)}</td><td class="${r.dR<0?'vneg':r.dR>0?'vpos':'vzero'}">${fmt(r.dR)}</td><td>${r.newL??'—'}</td><td>${r.newR??'—'}</td>`;
     tbody.appendChild(tr);
   }
   showSpacingContent(true);
 }
 
-if(typeof module!=='undefined')module.exports={avgMargin,avgMarginZones,topZoneOf,botZoneOf,showSpacingContent,renderSpacingTable};
+if(typeof module!=='undefined')module.exports={avgMargin,avgMarginZones,topZoneOf,botZoneOf,geomSB,computeSpacingRows,showSpacingContent,renderSpacingTable};

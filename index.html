@@ -60,6 +60,11 @@ body.light-mode .pr:has(#p-lazy),
 body.light-mode .pr:has(#p-pairlimit) {display:none;}
 .pl{font-size:11.5px;color:var(--text2);padding-top:5px;cursor:help;position:relative;}
 .pl span{display:block;font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:1px;}
+/* Preview marker legend (same colors as the preview pair dots) */
+.pvdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:4px;vertical-align:middle;position:relative;top:-1px;box-shadow:0 0 0 1px rgba(0,0,0,.45);}
+.pvdot.pv-cyan{background:#50dcff;}
+.pvdot.pv-red{background:#ff4545;}
+.pvdot.pv-ring{width:6px;height:6px;border:1.5px solid #ffd700;background:transparent;}
 /* Tooltip */
 .pl[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:0;top:calc(100% + 4px);z-index:200;background:#151820;border:1px solid var(--border2);border-radius:4px;padding:7px 10px;font-size:11px;font-family:var(--sans);color:var(--text2);line-height:1.55;white-space:pre-wrap;width:230px;box-shadow:0 6px 20px rgba(0,0,0,.6);pointer-events:none;}
 
@@ -302,7 +307,7 @@ body.light-mode #btn-light-act{display:block;}
   <div class="params-section">
     <div class="sec">Parameters
       <button id="btn-wizard" class="sec-action" onclick="wizOpen()" title="Guided setup: set the design values step by step, looking at type samples">✦ Setup</button>
-      <button id="btn-autoparam" class="sec-action" onclick="autoParam()" title="Auto-detect optimal parameters for the loaded font by scanning Laufweite variance">⚙ AutoParam</button>
+      <button id="btn-autoparam" class="sec-action" onclick="autoParam()" title="Scan Smooth, Blur and Min gap (Zones fixed at 16) in 5 steps across their range, refined coarse-to-fine until max triple-equilibrium Δ < 10 fu (at most 6 rounds); the value with the lowest max Δ wins. Runs automatically after font load. Result (timestamp · max-equilibrium · palette parameters) is appended to Font Info → Notes in Glyphs; afterwards the setup assistant opens.">⚙ AutoParam</button>
       <select id="preset-params" class="sec-action" onchange="applyParamPreset(this.value)" style="cursor:pointer;padding:2px 5px;font-size:9px;margin-left:0">
         <option value="">↺ Presets</option>
         <option value="default">Default</option>
@@ -350,15 +355,15 @@ body.light-mode #btn-light-act{display:block;}
     </div>
 
     <div class="pr" data-light="show">
-      <div class="pl" data-tip="Bias: legible vs. readable&#10;&#10;One slider for the trade-off between legibility (clear separation of shapes) and readability (even rhythm). Replaces the old threshold.&#10;&#10;− (legible): contact model gets stronger (higher beta), min gap grows up to +50%, small tightenings are dropped more freely.&#10;+ (readable): air model gets stronger (lower beta), small loosenings are dropped more freely.&#10;&#10;Dropping: base tolerance 0.3% of UPM, up to 4x wider on the side you care less about. Capped and rhythmic pairs are never dropped.&#10;0 = neutral. Default: 0">
-        Bias <span style="color:var(--text3);font-style:italic;font-size:9px">(legible − · readable +)</span><span>--bias · −100 … +100</span>
+      <div class="pl" data-tip="Bias: legible vs. readable&#10;&#10;One slider for the trade-off between legibility (clear separation of shapes) and readability (even rhythm). Replaces the old threshold.&#10;&#10;− (legible): contact model gets stronger (higher beta), min gap grows up to +50%, small tightenings are dropped more freely.&#10;+ (readable): air model gets stronger (lower beta), small loosenings are dropped more freely.&#10;&#10;Dropping: base tolerance 0.3% of UPM, up to 4x wider on the side you care less about. Capped and rhythmic pairs are never dropped.&#10;0 = neutral. Default: 0&#10;&#10;Preview: ○ yellow ring = correction dropped by bias.">
+        Bias<i class="pvdot pv-ring"></i> <span style="color:var(--text3);font-style:italic;font-size:9px">(legible − · readable +)</span><span>--bias · −100 … +100</span>
       </div>
       <input type="number" id="p-bias" value="0" min="-100" max="100" step="10">
     </div>
 
     <div class="pr">
-      <div class="pl" data-tip="Min gap % (no touch)&#10;&#10;Minimum ink distance as % of UPM, checked on the raw outline (independent of Smooth/Glow) — as a true 2D distance field: Euclidean minimum distance over fine profiles, so it also catches serif corners and diagonal near-misses between measuring zones.&#10;&#10;Scales with Width; bias towards legible raises it up to +50%.&#10;&#10;0 = off.&#10;Default: 1">
-        Min gap % <span style="color:var(--text3);font-style:italic;font-size:9px">(no touch · 2D)</span><span>--mingap · % of UPM floor</span>
+      <div class="pl" data-tip="Min gap % (no touch)&#10;&#10;Minimum ink distance as % of UPM, checked on the raw outline (independent of Smooth/Glow) — as a true 2D distance field: Euclidean minimum distance over fine profiles, so it also catches serif corners and diagonal near-misses between measuring zones.&#10;&#10;Scales with Width; bias towards legible raises it up to +50%.&#10;&#10;0 = off.&#10;Default: 1&#10;&#10;Preview: ● red dot = pair held apart by the min gap.">
+        Min gap %<i class="pvdot pv-red"></i> <span style="color:var(--text3);font-style:italic;font-size:9px">(no touch · 2D)</span><span>--mingap · % of UPM floor</span>
       </div>
       <input type="number" id="p-mingap" value="1" min="0" max="100" step="0.5">
     </div>
@@ -371,8 +376,8 @@ body.light-mode #btn-light-act{display:block;}
     </div>
 
     <div class="pr" data-light="show">
-      <div class="pl" data-tip="Pair limit&#10;&#10;Maximum number of kerning pairs to generate, ranked by frequency of occurrence in real-world text (Andre Fuchs corpus).&#10;&#10;Set to 0 to generate all pairs.&#10;Default: 6400">
-        Pair limit <span style="color:var(--text3);font-style:italic;font-size:9px">(top N by frequency)</span><span>--pairs · 0 = all pairs</span>
+      <div class="pl" data-tip="Pair limit&#10;&#10;Maximum number of kerning pairs to generate, ranked by frequency of occurrence in real-world text (Andre Fuchs corpus).&#10;&#10;Set to 0 to generate all pairs.&#10;Default: 6400&#10;&#10;Preview: ● cyan dot = pair not in the kerning list.">
+        Pair limit<i class="pvdot pv-cyan"></i> <span style="color:var(--text3);font-style:italic;font-size:9px">(top N by frequency)</span><span>--pairs · 0 = all pairs</span>
       </div>
       <input type="number" id="p-pairlimit" value="6400" min="0">
     </div>
@@ -682,6 +687,10 @@ let selectedPairIdx=-1;  // index into filteredData for pair-click preview
 let pairPreviewMode=false;  // true when showing a clicked pair in preview
 let baseValueLC=0,baseValueUC=0;
 let currentUPM=1000,yBotGlobal=0,yTopGlobal=0,xHeightGlobal=0;
+// space/nbspace have no outline (skipped from glyphCache) — their glyph
+// name + current advance width are collected separately so Spacing
+// Corrections can size them off "i" (09-spacing.js). {name,advanceWidth}|null
+let spaceGlyphInfo={sp:null,nbsp:null};
 
 // Glyphs mode state
 let glyphsByName={};         // name → {commands, advanceWidth, unicode} (Glyphs mode)
@@ -1704,6 +1713,14 @@ async function runAnalysis(){
     }
     log(`Params: zones=${p.zones} smooth=${document.getElementById('p-smooth').value} blur=${p.blur} round=${p.round} mingap=${Math.round(p.mingap*100)}% bias=${p.bias} tracking=${p.tracking} baseLc=${p.baselc} baseUc=${p.baseuc} pairlimit=${p.pairlimit||'all'} slant=${document.getElementById('p-slant').value||0}°`,'info');
 
+    // space/nbspace: no outline, so the margin loop below skips them —
+    // resolve name + current advance width directly for Spacing Corrections
+    spaceGlyphInfo={sp:null,nbsp:null};
+    for(const[key,ch]of[['sp',' '],['nbsp','\u00A0']]){
+      const g=fontObj.charToGlyph(ch);
+      if(g&&g.name&&g.name!=='.notdef')spaceGlyphInfo[key]={name:g.name,advanceWidth:g.advanceWidth||0};
+    }
+
     // Step 1: margins — all glyphs in font (allowedChars filter only used for pair building)
     const allKeys=Object.keys(fontObj.glyphs.glyphs);
     let done=0;
@@ -1804,6 +1821,7 @@ async function runAnalysis(){
   updateCadenceField();
   afterCompute();
   if(typeof wizMaybeAutoOpen==='function')wizMaybeAutoOpen();
+  if(typeof apAfterAnalysis==='function')apAfterAnalysis();
 }
 
 // ══════════════════════════════════════════════════════
@@ -1866,6 +1884,8 @@ function receiveGlyphData(data){
     glyphsByName[g.name] = g;
     if(g.unicode != null) unicodeToGlyphName[g.unicode] = g.name;
   }
+  // space/nbspace: no outline, sent separately by Python (_send_glyph_data_inner)
+  spaceGlyphInfo={sp:data.spaceGlyphs?.sp||null,nbsp:data.spaceGlyphs?.nbsp||null};
   const info = document.getElementById('header-font-info');
   if(info) info.innerHTML=`<strong>${esc(data.fontName)}</strong>&nbsp; Master:&nbsp;${esc(data.masterName)}&nbsp; UPM:${data.upm}`;
   const fname=document.getElementById('drop-fname');
@@ -2085,6 +2105,7 @@ async function runAnalysisFromGlyphsData(data){
   updateCadenceField();
   afterCompute();
   if(typeof wizMaybeAutoOpen==='function')wizMaybeAutoOpen();
+  if(typeof apAfterAnalysis==='function')apAfterAnalysis();
 }
 
 // Non-zero pairs to output, capped to pairlimit (0 = all), in fuchs order.
@@ -2122,36 +2143,17 @@ function showApplyResult(result){
 
 function applySpacingToGlyphs(){
   if(!IS_GLYPHS){return;}
-  const gks=Object.keys(glyphCache);
-  if(!gks.length){alert('No spacing data — run Compute first.');return;}
-  const p=P();
-  const trk=p.tracking/2;
-  const baseLcGC=glyphCache[p.baselc],baseUcGC=glyphCache[p.baseuc];
-  // Zone range of each base glyph: botZ = lower ink boundary, topZ = upper ink boundary
-  const lcBotZ=baseLcGC?botZoneOf(baseLcGC):null, lcTopZ=baseLcGC?topZoneOf(baseLcGC):null;
-  const ucBotZ=baseUcGC?botZoneOf(baseUcGC):null, ucTopZ=baseUcGC?topZoneOf(baseUcGC):null;
-  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+trk:null;
-  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+trk:null;
-  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+trk:null;
-  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+trk:null;
-  const items=[];
-  for(const gk of gks){
-    const gc=glyphCache[gk];
-    if(!gc)continue;
-    const isUC=gc.cls==='UC';
-    const botZ=isUC?ucBotZ:lcBotZ, topZ=isUC?ucTopZ:lcTopZ;
-    const bL=isUC?baseUcL:baseLcL,bR=isUC?baseUcR:baseLcR;
-    if(bL===null||bR===null||botZ===null||topZ===null)continue;
-    const gL=avgMarginZones(gc.left,botZ,topZ),gR=avgMarginZones(gc.right,botZ,topZ);
-    if(gL===null||gR===null)continue;
-    const dL=rtm(bL-gL,p.round);
-    const dR=rtm(bR-gR,p.round);
-    const newAW=rtm(gc.advanceWidth+dL+dR,p.round);
-    const dWidth=newAW-gc.advanceWidth-dL;
-    items.push({name:gc.glyphName,dlsb:dL,dwidth:dWidth});
-  }
+  if(!Object.keys(glyphCache).length){alert('No spacing data — run Compute first.');return;}
+  // Shared spacing rows (09): base glyph centered, offset inherited,
+  // negative sidebearings clamped to 0. dwidth is applied width-first in
+  // Python (RSB shifts by dwidth, then LSB by dlsb keeping RSB).
+  const rows=computeSpacingRows();
+  const items=rows.map(r=>({name:r.gc.glyphName,dlsb:r.dL,dwidth:r.newAW-r.oldAW-r.dL}));
   if(!items.length){alert('No adjustments to apply.');return;}
-  window.location.href='kerntrip://applyspacing?'+encodeURIComponent(JSON.stringify(items));
+  // unit rides along so Python sets the master's unitizerUnit custom
+  // parameter to the module value. plugin.py also accepts a bare array.
+  const payload={items,unit:P().round};
+  window.location.href='kerntrip://applyspacing?'+encodeURIComponent(JSON.stringify(payload));
 }
 
 function showSpacingApplyResult(result){
@@ -2341,13 +2343,38 @@ document.addEventListener('keydown',e=>{
   }
 });
 
-// ── SPACING CORRECTIONS TABLE ──────────────────────────
+// ── SPACING CORRECTIONS ────────────────────────────────
 /**
- * For each glyph, find its self-pair correction (A+A, n+n, etc.)
- * Then compute suggested spacing adjustments:
- *   - ΔAdvanceWidth: half the self-kern correction (split symmetrically)
- *   - ΔSidebearing: quarter of the self-kern (shift glyph inside bounds)
- *   Net effect: if applied, the self-pair kern approaches zero.
+ * Target margins per class come from the base glyphs (o/O). Five rules:
+ *   1. The base glyph itself is centered: LSB = RSB (exact, no module
+ *      rounding), advance width unchanged. "LSB/RSB" here means the ink
+ *      extent at half the x-height (halfXhSB), not the true geometric
+ *      minimum — that avoids letting serifs (near baseline/cap-height)
+ *      or hooks/overshoots skew what should be a stem-width reading.
+ *   2. Its centering offset shifts the class targets, so every other
+ *      glyph inherits the same offset and keeps fitting the base.
+ *   3. Sidebearings never go negative: the negative side is pinned at 0
+ *      and the advance width rounds UP to the next module width (< 1
+ *      module unit added in total); the remaining slack is distributed
+ *      across the bearings in proportion to their computed widths. This
+ *      is the true-minimum (geomSB) check — unlike rule 1/4, it must see
+ *      the real outline, serifs and hooks included, or it would let ink
+ *      actually overlap.
+ *   4. Narrow glyphs (resulting width from rules 2/3 < half of "n"): the
+ *      width itself is examined FIRST and never recomputed — only the
+ *      already-decided dL/dR split is redistributed, using halfXhSB
+ *      (same stem-width reading as rule 1), so LSB == RSB within that
+ *      fixed width. If a deep localized overhang elsewhere (e.g. a
+ *      descender hook) would then go negative at the TRUE minimum
+ *      (geomSB), the deficit shifts to the other side, same width — a
+ *      correctness backstop, not the old "skip if under one module"
+ *      guard: it only engages on an actual negative bound and never
+ *      reverts to the rules 2/3 split wholesale.
+ *   5. space/nbspace have no ink (no margins, excluded from the loop
+ *      above) — they simply take the advance width of "i" (picks up
+ *      rule 4's centering if "i" itself qualifies as narrow).
+ * computeSpacingRows() is the single source — table (renderSpacingTable)
+ * and Apply Spacing (07) both consume its rows.
  */
 function avgMargin(arr){
   let sum=0,cnt=0;
@@ -2373,25 +2400,64 @@ function botZoneOf(gc){
   return 0;
 }
 
-function showSpacingContent(show){
-  const empty=document.getElementById('spacing-empty');
-  const content=document.getElementById('spacing-content');
-  if(show){empty.style.display='none';content.style.display='flex';}
-  else{empty.style.display='flex';content.style.display='none';}
+// Geometric sidebearing: minimum of the fine profile (per convention the
+// geometric data, never the smoothed/glow arrays). Negative for overhangs.
+function geomSB(arr){
+  if(!arr)return null;
+  let m=null;
+  for(const v of arr)if(v!==null&&(m===null||v<m))m=v;
+  return m;
 }
 
-function renderSpacingTable(){
+// Nearest non-null fine-profile row to idx (outward search) — a stem
+// glyph's sample row at exactly half x-height is essentially never empty,
+// but this guards degenerate/very short glyphs.
+function nearestNonNull(arr,idx){
+  if(arr[idx]!==null)return arr[idx];
+  for(let d=1;d<arr.length;d++){
+    if(idx-d>=0&&arr[idx-d]!==null)return arr[idx-d];
+    if(idx+d<arr.length&&arr[idx+d]!==null)return arr[idx+d];
+  }
+  return null;
+}
+// Left/right ink extent sampled at half the x-height — a clean stem-width
+// reading, away from serifs (which sit at baseline/x-height/cap-height)
+// and hooks/overshoots (descenders, bowls) that would skew the true
+// geometric minimum (geomSB) used for centering. x-height falls back to
+// 55% of the em (same estimate used for slant auto-detection) when the
+// font provides none.
+function halfXhSB(gc){
+  const l=gc.leftFine??gc.leftGeom,r=gc.rightFine??gc.rightGeom;
+  if(!l||!r||!l.length)return{l:null,r:null};
+  const rowH=(yTopGlobal-yBotGlobal)/l.length;
+  if(rowH<=0)return{l:null,r:null};
+  const xh=(IS_GLYPHS?xHeightGlobal:(fontObj?.tables?.os2?.sxHeight||0))||Math.round((yTopGlobal-yBotGlobal)*0.55);
+  let idx=Math.floor((xh/2-yBotGlobal)/rowH);
+  idx=Math.max(0,Math.min(l.length-1,idx));
+  return{l:nearestNonNull(l,idx),r:nearestNonNull(r,idx)};
+}
+
+// One row per glyph — shared by the table and Apply Spacing.
+function computeSpacingRows(){
   const gks=Object.keys(glyphCache);
-  if(!gks.length){showSpacingContent(false);return;}
+  if(!gks.length)return[];
   const p=P();
-  const baseLcGC=glyphCache[p.baselc],baseUcGC=glyphCache[p.baseuc];
   const trk=p.tracking/2; // tracking split equally across left and right margin targets
+  const baseLcGC=glyphCache[p.baselc],baseUcGC=glyphCache[p.baseuc];
   const lcBotZ=baseLcGC?botZoneOf(baseLcGC):null, lcTopZ=baseLcGC?topZoneOf(baseLcGC):null;
   const ucBotZ=baseUcGC?botZoneOf(baseUcGC):null, ucTopZ=baseUcGC?topZoneOf(baseUcGC):null;
-  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+trk:null;
-  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+trk:null;
-  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+trk:null;
-  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+trk:null;
+  // centering offset per base glyph: shift that equalizes its half-x-height
+  // ink extent — folded into the class targets so all glyphs inherit it
+  const sbOff=gc=>{
+    if(!gc)return 0;
+    const s=halfXhSB(gc);
+    return s.l===null||s.r===null?0:(s.r-s.l)/2;
+  };
+  const sLc=sbOff(baseLcGC),sUc=sbOff(baseUcGC);
+  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+trk+sLc:null;
+  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+trk-sLc:null;
+  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+trk+sUc:null;
+  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+trk-sUc:null;
 
   const rows=[];
   for(const gk of gks){
@@ -2403,15 +2469,103 @@ function renderSpacingTable(){
     if(bL===null||bR===null||botZ===null||topZ===null)continue;
     const gL=avgMarginZones(gc.left,botZ,topZ),gR=avgMarginZones(gc.right,botZ,topZ);
     if(gL===null||gR===null)continue;
-    const dL=rtm(bL-gL,p.round);
-    const dR=rtm(bR-gR,p.round);
+    const isBase=gc===baseLcGC||gc===baseUcGC;
     const oldAW=gc.advanceWidth;
-    const newAW=rtm(oldAW+dL+dR,p.round);
+    let dL,dR,newAW;
+    if(isBase){
+      // exact centering: LSB = RSB afterwards, module rounding would break it
+      const s=isUC?sUc:sLc;
+      dL=Math.round(trk+s);dR=Math.round(trk-s);
+      newAW=oldAW+dL+dR;
+    }else{
+      dL=rtm(bL-gL,p.round);
+      dR=rtm(bR-gR,p.round);
+      newAW=rtm(oldAW+dL+dR,p.round);
+      const lsb=geomSB(gc.leftFine??gc.leftGeom),rsb=geomSB(gc.rightFine??gc.rightGeom);
+      const clampL=lsb!==null&&lsb+dL<0;
+      const clampR=rsb!==null&&rsb+(newAW-oldAW-dL)<0;
+      if(clampL||clampR){
+        // Negative sidebearings never reach the output: the negative side is
+        // pinned at 0 and the advance width stays on the module grid — the
+        // NEXT module width up (smaller would push a bearing negative again),
+        // so at most one module unit is added. The remaining slack is split
+        // across the bearings ∝ the previously computed bearing widths:
+        // the pinned side (width 0) gets nothing and stays exactly 0.
+        const dLx=clampL?-lsb:dL, dRx=clampR?-rsb:dR;
+        const exact=oldAW+dLx+dRx;
+        const mod=Math.max(1,p.round);
+        newAW=Math.ceil(exact/mod-1e-9)*mod;
+        const slack=newAW-exact;
+        const sideL=Math.max(0,(lsb??0)+dLx), sideR=Math.max(0,(rsb??0)+dRx);
+        const propL=sideL+sideR>0?sideL/(sideL+sideR):0.5;
+        dL=Math.round(dLx+slack*propL);
+        dR=Math.round(newAW-oldAW-dL); // effective right correction
+      }
+    }
     const dAW=newAW-oldAW;
-    const newL=r1(gL+dL);
-    const newR=r1(gR+dR);
-    rows.push({gk,gc,oldAW,newAW,dAW,dL,dR,newL,newR});
+    rows.push({gk,gc,oldAW,newAW,dAW,dL,dR,newL:r1(gL+dL),newR:r1(gR+dR)});
   }
+
+  // Narrow glyphs (period, comma, dots, j …): first examine the RESULTING
+  // width rules 2/3 already settled on (module grid, negative-bearing
+  // clamp already applied) — only if that width is under half of "n" do
+  // we then improve the ALIGNMENT within it. The width itself is never
+  // recomputed here: dL/dR are redistributed (their sum, and so newAW,
+  // stays exactly what rules 2/3 decided) so LSB == RSB, using halfXhSB
+  // (stem-width reading, not the true geometric minimum — see rule 1)
+  // so a descender hook like on "j" can't skew the split. Needs the full
+  // "n" row, so this runs as a second pass over the already-built rows
+  // (build order is unreliable).
+  const nRow=rows.find(r=>r.gc.charLabel==='n');
+  if(nRow){
+    for(const r of rows){
+      if(r.gc.cls==='SP'||r.gc===baseLcGC||r.gc===baseUcGC)continue;
+      if(r.newAW>=nRow.newAW/2)continue;
+      const s=halfXhSB(r.gc);
+      if(s.l===null||s.r===null)continue;
+      const widthDelta=r.newAW-r.oldAW; // fixed — the resulting width, decided above, is never touched
+      const sumSlack=s.l+s.r+widthDelta; // curLSB+curRSB at that fixed width, independent of the L/R split
+      let dL=Math.round(sumSlack/2)-s.l;
+      let dR=widthDelta-dL;              // derived, so dL+dR stays exactly widthDelta
+      // Centering reads the clean stem (halfXhSB), so it can land a split
+      // that a deep localized overhang elsewhere (e.g. a descender hook)
+      // would push past zero at the TRUE minimum (geomSB) — shift the
+      // deficit to the other side, same width, rather than letting ink
+      // actually overlap. Unlike the removed guard this never reverts the
+      // whole centering attempt, it only engages on a real negative bound.
+      const trueL=geomSB(r.gc.leftFine??r.gc.leftGeom),trueR=geomSB(r.gc.rightFine??r.gc.rightGeom);
+      if(trueL!==null&&trueL+dL<0){const deficit=-(trueL+dL);dL+=deficit;dR-=deficit;}
+      if(trueR!==null&&trueR+dR<0){const deficit=-(trueR+dR);dR+=deficit;dL-=deficit;}
+      r.dL=dL;r.dR=dR;r.newL=r1(s.l+dL);r.newR=r1(s.r+dR);
+      // r.newAW / r.dAW intentionally untouched — only the L/R split moves
+    }
+  }
+
+  // space & nbspace: no ink, so they never enter the loop above (no left/
+  // right margins). Instead they take the same advance width as "i" — the
+  // whole delta is a pure width change, no sidebearing to shift.
+  const iRow=rows.find(r=>r.gc.charLabel==='i');
+  if(iRow){
+    for(const key of['sp','nbsp']){
+      const info=spaceGlyphInfo[key];
+      if(!info)continue;
+      const oldAW=info.advanceWidth,newAW=iRow.newAW,dAW=newAW-oldAW;
+      rows.push({gk:'__'+key,gc:{charLabel:info.name,cls:'SP',glyphName:info.name},oldAW,newAW,dAW,dL:0,dR:dAW,newL:null,newR:null});
+    }
+  }
+  return rows;
+}
+
+function showSpacingContent(show){
+  const empty=document.getElementById('spacing-empty');
+  const content=document.getElementById('spacing-content');
+  if(show){empty.style.display='none';content.style.display='flex';}
+  else{empty.style.display='flex';content.style.display='none';}
+}
+
+function renderSpacingTable(){
+  if(!Object.keys(glyphCache).length){showSpacingContent(false);return;}
+  const rows=computeSpacingRows();
 
   if(!rows.length){
     showSpacingContent(false);
@@ -2449,7 +2603,7 @@ function renderSpacingTable(){
   for(const r of rows){
     const tr=document.createElement('tr');
     const cls=r.gc.cls==='UC'?'tuc':'tlc';
-    tr.innerHTML=`<td class="cc">${esc(r.gc.charLabel)}</td><td class="${cls}">${r.gc.cls}</td><td>${r.oldAW}</td><td style="font-weight:700">${r.newAW}</td><td class="${r.dAW<0?'vneg':r.dAW>0?'vpos':'vzero'}">${fmt(r.dAW)}</td><td class="${r.dL<0?'vneg':r.dL>0?'vpos':'vzero'}">${fmt(r.dL)}</td><td class="${r.dR<0?'vneg':r.dR>0?'vpos':'vzero'}">${fmt(r.dR)}</td><td>${r.newL}</td><td>${r.newR}</td>`;
+    tr.innerHTML=`<td class="cc">${esc(r.gc.charLabel)}</td><td class="${cls}">${r.gc.cls}</td><td>${r.oldAW}</td><td style="font-weight:700">${r.newAW}</td><td class="${r.dAW<0?'vneg':r.dAW>0?'vpos':'vzero'}">${fmt(r.dAW)}</td><td class="${r.dL<0?'vneg':r.dL>0?'vpos':'vzero'}">${fmt(r.dL)}</td><td class="${r.dR<0?'vneg':r.dR>0?'vpos':'vzero'}">${fmt(r.dR)}</td><td>${r.newL??'—'}</td><td>${r.newR??'—'}</td>`;
     tbody.appendChild(tr);
   }
   showSpacingContent(true);
@@ -3578,12 +3732,24 @@ if(IS_GLYPHS){
 }
 
 // ══════════════════════════════════════════════════════
-// AUTOPARAM — automatic parameter detection
+// AUTOPARAM — parameter scan by triple equilibrium
 // ══════════════════════════════════════════════════════
+// Scans smooth, blur and mingap (zones fixed at 16; glow/glowblur, lazy
+// and round stay untouched — glow is off by default, lazy/round are style
+// choices). Each parameter is iterated in 5 even steps across its range;
+// the candidate with the lowest max triple-equilibrium Δ wins (lite
+// computation on the test-string glyphs, triples from the corpus pairs —
+// same construction as 15-equilibrium). Coarse-to-fine rounds: each round
+// re-scans a range halved around the previous optimum, until max Δ < 10 fu
+// (at most 6 rounds). Runs automatically after every font load; afterwards
+// the result is documented in Font Info → Notes (Glyphs mode) — timestamp,
+// max-equilibrium, palette parameters — and the optician window (setup
+// assistant, 16-wizard) opens.
 // Test text covers a broad mix of upper/lower, round/diagonal, straight shapes.
 const _AP_TEXT = 'Arrowroot Barley Chervil Dumpling Endive Flaxseed Garbanzo Hijiki Ishtu Jicama Kale Lychee Marjoram Nectarine Oxtail Pizza Quinoa Roquefort Squash Tofu Uppuma Vanilla Wheat Xergis Yogurt Zweiback';
 
 let _apRunning = false;
+let _apNotePending = false;
 
 // ── Field helpers ─────────────────────────────────────
 function _apSaveFields() {
@@ -3627,6 +3793,25 @@ function _apSetField(key, value) {
   else el.value = value;
 }
 
+// ── Scan candidates: 5 even steps across [lo, hi] ─────────────────────────────
+// _AP_RANGE holds the full scan domain per parameter (round 1); the input max
+// would be a validation limit, not a plausible design range (mingap up to
+// 100% of UPM, blur up to 50). Later rounds pass a narrowed [lo, hi].
+const _AP_RANGE = { smooth: [0, 99], blur: [1, 16], mingap: [0, 8] };
+const _AP_TARGET = 10;     // fu — stop as soon as max equilibrium Δ drops below
+const _AP_ROUNDS_MAX = 6;  // hard cap on refinement rounds
+
+function _apSteps(key, lo, hi) {
+  const el = document.getElementById('p-' + key);
+  const st = parseFloat(el.step || '1') || 1;
+  const out = [];
+  for (let i = 0; i < 5; i++) {
+    const v = +(Math.round((lo + (hi - lo) * i / 4) / st) * st).toFixed(4);
+    if (!out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
 // ── Char map: char → {aw, charLabel} ─────────────────
 // Built once per font; stays valid across all scan iterations.
 function _apBuildCharMap() {
@@ -3647,36 +3832,45 @@ function _apBuildCharMap() {
       }
     }
   }
-  // Space advance width
-  if (IS_GLYPHS) {
-    const gname = unicodeToGlyphName[32];
-    const sp = gname ? glyphsByName[gname] : null;
-    map[' '] = { charLabel: ' ', aw: sp && sp.advanceWidth ? sp.advanceWidth : Math.round(currentUPM * 0.25) };
-  } else {
-    const sp = fontObj ? fontObj.charToGlyph(' ') : null;
-    map[' '] = { charLabel: ' ', aw: sp && sp.advanceWidth ? sp.advanceWidth : Math.round(currentUPM * 0.25) };
-  }
   return map;
 }
 
-// ── Laufweite: sum of AW + kerning for test string ────
-function _apWidth(charMap, corrMap) {
-  let width = 0, prev = null;
-  for (const ch of _AP_TEXT) {
-    const entry = charMap[ch];
-    if (!entry) { prev = null; continue; }
-    if (ch === ' ') { width += entry.aw; prev = null; continue; }
-    width += entry.aw;
-    if (prev) width += corrMap[prev.charLabel + '|' + entry.charLabel] || 0;
-    prev = entry;
+// ── Triples from the corpus pairs, restricted to test-string chars ────────────
+// Same construction as computeEquilibrium (15): top pairs → (A,B)+(B,C).
+// Built once per run; also returns the unique pairs the triples need.
+function _apBuildTriples(charMap) {
+  const TOPP = 400, MAXT = 800;
+  const byFirst = {}, top = [];
+  for (const pair of KERNING_PAIRS) {
+    if (top.length >= TOPP) break;
+    const c = [...pair];
+    if (c.length < 2) continue;
+    if (!charMap[c[0]] || !charMap[c[1]]) continue;
+    top.push(c);
+    (byFirst[c[0]] = byFirst[c[0]] || []).push(c[1]);
   }
-  return width;
+  const triples = [], pairSet = new Set(), seen = new Set();
+  outer:
+  for (const [a, b] of top) {
+    const nexts = byFirst[b];
+    if (!nexts) continue;
+    for (const c of nexts) {
+      const id = a + b + c;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      triples.push([a, b, c]);
+      pairSet.add(a + '|' + b);
+      pairSet.add(b + '|' + c);
+      if (triples.length >= MAXT) break outer;
+    }
+  }
+  return { triples, pairs: [...pairSet] };
 }
 
-// ── Lite analysis: only the glyphs and pairs the test string needs ────────────
-// No KERNING_PAIRS filter, no SC/OSF expansion, no UI updates.
-// Works in both browser mode (fontObj) and Glyphs mode (glyphsByName).
-async function _apLiteAnalysis(charMap) {
+// ── Lite equilibrium score for the current field values ───────────────────────
+// Margins for the test-string chars, corrections via the shared pair core
+// (03), then max Δ = |gapL − gapR| over the triples. Lower is better.
+async function _apEquiScore(charMap, tri) {
   await new Promise(r => setTimeout(r, 0)); // yield so log messages paint
 
   const p   = P();
@@ -3685,7 +3879,7 @@ async function _apLiteAnalysis(charMap) {
 
   // Margins for unique chars in test string + base glyphs
   const localGC = {};
-  const needed  = new Set([...Object.keys(charMap).filter(c => c !== ' '), p.baselc, p.baseuc]);
+  const needed  = new Set([...Object.keys(charMap), p.baselc, p.baseuc]);
 
   for (const ch of needed) {
     if (IS_GLYPHS) {
@@ -3708,64 +3902,95 @@ async function _apLiteAnalysis(charMap) {
   // shared pair core (03): same context as 05/06
   const ctx = buildPairCtx(p, localGC, upm, yBot, yTop, rhythmGridFromUI(p));
 
-  // Corrections for every unique consecutive pair in the test string —
-  // no KERNING_PAIRS filter, the test string defines the pairs directly.
-  const corrMap = {};
-  let prev = null;
-  for (const ch of _AP_TEXT) {
-    if (ch === ' ') { prev = null; continue; }
-    if (prev !== null) {
-      const key = prev + '|' + ch;
-      if (!(key in corrMap)) {
-        const gcA = localGC[prev], gcB = localGC[ch];
-        if (gcA && gcB) {
-          // shared pair core (03): the whole formula in one place
-          const r = pairCorrCore(gcA, gcB, p, ctx);
-          if (r) corrMap[key] = r.corr;
-        }
-      }
-    }
-    prev = ch;
+  const corrOf = {};
+  for (const key of tri.pairs) {
+    const [a, b] = key.split('|');
+    const gA = localGC[a], gB = localGC[b];
+    if (!gA || !gB) continue;
+    // shared pair core (03): the whole formula in one place
+    const r = pairCorrCore(gA, gB, p, ctx);
+    if (r) corrOf[key] = r.corr;
   }
-  return corrMap;
+
+  let maxErr = 0, n = 0;
+  for (const [a, b, c] of tri.triples) {
+    const gA = localGC[a], gB = localGC[b], gC = localGC[c];
+    if (!gA || !gB || !gC) continue;
+    const mL = pairMean(gA.right, gB.left), mR = pairMean(gB.right, gC.left);
+    if (!mL || !mR) continue;
+    const gapL = mL.mean + (corrOf[a + '|' + b] || 0);
+    const gapR = mR.mean + (corrOf[b + '|' + c] || 0);
+    const err  = Math.abs(gapL - gapR);
+    if (err > maxErr) maxErr = err;
+    n++;
+  }
+  return n ? maxErr : Infinity;
 }
 
-// ── Single scan iteration: set fields → lite analysis → Laufweite ────────────
-async function _apRun(base, optimal, paramKey, testValue, charMap) {
-  _apRestoreFields(base);
-  for (const [k, v] of Object.entries(optimal)) _apSetField(k, v);
-  _apSetField(paramKey, testValue);
-  const corrMap = await _apLiteAnalysis(charMap);
-  return _apWidth(charMap, corrMap);
-}
-
-// ── Scan one parameter across its candidate values ────────────────────────────
-// Returns the candidate whose Laufweite is closest to the lower average:
-// mean of all widths at or below the overall mean — the converged stable state.
-async function _apScan(label, paramKey, candidates, base, optimal, charMap, stepN, totalSteps) {
+// ── Scan one parameter: 5 steps, keep the lowest max equilibrium Δ ────────────
+async function _apScan(label, paramKey, candidates, base, optimal, charMap, tri, stepN, totalSteps) {
   const btn = document.getElementById('btn-autoparam');
   if (btn) btn.textContent = `⚙ ${label} (${stepN}/${totalSteps})`;
   log(`AutoParam ${stepN}/${totalSteps}: scanning ${label} [${candidates.join(', ')}]`, 'info');
 
-  const widths = [];
-  for (const v of candidates) {
-    const w = await _apRun(base, optimal, paramKey, v, charMap);
-    widths.push(w);
-    log(`  ${label}=${v} → Laufweite ${Math.round(w)} fu`, 'info');
-  }
-
-  const globalMean = widths.reduce((s, w) => s + w, 0) / widths.length;
-  const below      = widths.filter(w => w <= globalMean);
-  const lowerAvg   = below.length ? below.reduce((s, w) => s + w, 0) / below.length : globalMean;
-  let bestIdx = 0, bestDiff = Infinity;
+  let bestIdx = 0, bestScore = Infinity;
   for (let i = 0; i < candidates.length; i++) {
-    const d = Math.abs(widths[i] - lowerAvg);
-    if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+    _apRestoreFields(base);
+    for (const [k, v] of Object.entries(optimal)) _apSetField(k, v);
+    _apSetField(paramKey, candidates[i]);
+    const score = await _apEquiScore(charMap, tri);
+    log(`  ${label}=${candidates[i]} → max equilibrium Δ ${r1(score)} fu`, 'info');
+    if (score < bestScore) { bestScore = score; bestIdx = i; }
   }
 
-  const best = candidates[bestIdx];
-  log(`AutoParam ${stepN}/${totalSteps}: ${label} → ${best} (Laufweite ${Math.round(widths[bestIdx])} fu, lower avg ${Math.round(lowerAvg)} fu)`, 'ok');
-  return best;
+  log(`AutoParam ${stepN}/${totalSteps}: ${label} → ${candidates[bestIdx]} (max Δ ${r1(bestScore)} fu)`, 'ok');
+  return { best: candidates[bestIdx], score: bestScore };
+}
+
+// ── Run documentation: Font Info → Notes block ────────────────────────────────
+// Palette parameters in panel order, as menu values.
+function _apPaletteLine() {
+  const p = P();
+  return `width ${p.width}, stemgap ${p.stemgap}, rhythm ${p.rhythm ? 'on' : 'off'}, ` +
+         `lazy ${p.lazy}, bias ${p.bias}, mingap ${+(p.mingap * 100).toFixed(1)}, ` +
+         `round ${p.round}, pairlimit ${p.pairlimit}`;
+}
+
+// Called from the end of 05/06 (like wizMaybeAutoOpen), two duties:
+// 1. After the full analysis that AutoParam itself triggered: equiData holds
+//    the real equilibrium — document timestamp, result and palette parameters
+//    as an appended note block, then open the optician window (setup
+//    assistant; respects its "open automatically" preference).
+// 2. After the first analysis of a freshly loaded font: start AutoParam
+//    automatically — the flow is load → AutoParam → optician window.
+let _apSeenFont = '';
+function apAfterAnalysis() {
+  if (_apNotePending) {
+    _apNotePending = false;
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const maxE  = (typeof equiData !== 'undefined' && equiData.length) ? equiData[0].err : null;
+    const lines = [
+      `[KernTrip AutoParam] ${stamp}`,
+      `max-equilibrium ${maxE != null ? maxE : 'n/a'}`,
+      _apPaletteLine(),
+    ];
+    for (const l of lines) log(l, 'ok');
+    if (IS_GLYPHS) {
+      window.location.href = 'kerntrip://note?' + encodeURIComponent(JSON.stringify({ lines }));
+    }
+    const wizAuto = typeof wizAutoEnabled === 'function' ? wizAutoEnabled() : true;
+    if (wizAuto && typeof wizOpen === 'function') wizOpen();
+    return;
+  }
+  // fresh font? (same key logic as the wizard: font+master, fontName fallback)
+  const key = (typeof lastFontKey !== 'undefined' && lastFontKey) ? lastFontKey : fontName;
+  if (!key || key === _apSeenFont) return;
+  _apSeenFont = key;
+  if (!glyphCache || !Object.keys(glyphCache).length) return;
+  if (_apRunning) return;
+  log('AutoParam: starting automatically after font load…', 'info');
+  setTimeout(() => autoParam(), 0);
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
@@ -3792,26 +4017,53 @@ async function autoParam() {
   try {
     const base    = _apSaveFields();
     const charMap = _apBuildCharMap();
-    const mapped  = Object.keys(charMap).length - 1; // exclude space
+    const mapped  = Object.keys(charMap).length;
     if (mapped === 0) { log('AutoParam: no test-string glyphs found in font', 'err'); return; }
-    log(`AutoParam: ${mapped} unique chars, lite analysis (no KERNING_PAIRS lookup)`, 'info');
+    const tri = _apBuildTriples(charMap);
+    if (!tri.triples.length) { log('AutoParam: no corpus triples possible with this font', 'err'); return; }
+    log(`AutoParam: ${mapped} unique chars, ${tri.triples.length} triples (${tri.pairs.length} pairs) — criterion: lowest max equilibrium Δ`, 'info');
 
-    const optimal = {};
-    const TOTAL   = 7;   // bias is a style choice, not a scan parameter
+    // zones is fixed at 16, glow/glowblur stay off, lazy/round/bias are
+    // style choices — only the measuring trio is scanned, coarse-to-fine:
+    // round 1 covers the full _AP_RANGE, each later round halves the range
+    // around the previous optimum. Iterates until max Δ < _AP_TARGET fu,
+    // at most _AP_ROUNDS_MAX rounds; converged ranges are skipped.
+    const PARAMS  = [['Smooth', 'smooth'], ['Blur', 'blur'], ['MinGap', 'mingap']];
+    const TOTAL   = PARAMS.length * _AP_ROUNDS_MAX;
+    const optimal = { zones: 16 };
+    const range   = {};
+    for (const [, key] of PARAMS) range[key] = _AP_RANGE[key].slice();
 
-    optimal.zones     = await _apScan('Zones',     'zones',     [3,9,18,36,48,96],  base, optimal, charMap, 1, TOTAL);
-    optimal.smooth    = await _apScan('Smooth',    'smooth',    [11,33,50,66,88],   base, optimal, charMap, 2, TOTAL);
-    optimal.blur      = await _apScan('Blur',      'blur',      [1,2,4,8,16],       base, optimal, charMap, 3, TOTAL);
-    optimal.glowblur  = await _apScan('GlowBlur',  'glowblur',  [0,1,2,3,4,5],     base, optimal, charMap, 4, TOTAL);
-    optimal.round     = await _apScan('Round',     'round',     [1,5,10,20,40],     base, optimal, charMap, 5, TOTAL);
-    optimal.lazy      = await _apScan('Lazy',      'lazy',      [0,20,40,60,80],    base, optimal, charMap, 6, TOTAL);
-    optimal.mingap    = await _apScan('MinGap',    'mingap',    [0,1,2,4,6,8],      base, optimal, charMap, 7, TOTAL);
+    let stepN = 0, score = Infinity;
+    scan:
+    for (let round = 1; round <= _AP_ROUNDS_MAX; round++) {
+      let scanned = 0;
+      for (const [label, key] of PARAMS) {
+        stepN++;
+        const cands = _apSteps(key, range[key][0], range[key][1]);
+        if (cands.length < 2) { log(`AutoParam ${stepN}/${TOTAL}: ${label} range converged (${cands[0]})`, 'info'); continue; }
+        scanned++;
+        const r = await _apScan(`${label} R${round}`, key, cands, base, optimal, charMap, tri, stepN, TOTAL);
+        optimal[key] = r.best;
+        score = r.score;
+        // refine: next round scans half the span, centered on the optimum
+        const half = (range[key][1] - range[key][0]) / 4;
+        const [blo, bhi] = _AP_RANGE[key];
+        range[key] = [Math.max(blo, r.best - half), Math.min(bhi, r.best + half)];
+        if (score < _AP_TARGET) { log(`AutoParam: target reached — max Δ ${r1(score)} fu < ${_AP_TARGET} fu`, 'ok'); break scan; }
+      }
+      if (!scanned) { log('AutoParam: all ranges converged — stopping', 'info'); break; }
+    }
+    if (score >= _AP_TARGET) log(`AutoParam: scan finished at max Δ ${r1(score)} fu (target ${_AP_TARGET} fu not reached)`, 'info');
 
     // Apply all optimal values, then trigger the full analysis to refresh the UI
     if (btn) btn.textContent = '⚙ Applying…';
     _apRestoreFields(base);
     for (const [k, v] of Object.entries(optimal)) _apSetField(k, v);
     log('AutoParam: optimal parameters applied — running full analysis…', 'ok');
+    // apMaybeDocument (hook at the end of 05/06) writes the note block once
+    // the full analysis — and with it the real equilibrium — is done.
+    _apNotePending = true;
     // In Glyphs mode runAnalysis() navigates to Python and returns immediately;
     // the panel is restored in finally so the user sees params while Python responds.
     runAnalysis();
@@ -3948,21 +4200,17 @@ const WIZ_STEPS=[
 ];
 
 let wizIdx=0,wizVals={},wizRhythm=true,wizSel={},wizL2K=null;
-let _wizSeenFont='',wizFinishPending=false,wizAutoNote='';
+let wizFinishPending=false,wizAutoNote='';
 
-// ── Auto-open after font load (can be turned off via localStorage) ──
+// ── Auto-open preference (can be turned off via localStorage) ──
+// The open itself now happens after AutoParam: load → AutoParam → assistant
+// (apAfterAnalysis in 14 checks wizAutoEnabled and calls wizOpen).
 function wizAutoEnabled(){try{return localStorage.getItem('kerntripWizAuto')!=='0';}catch(_){return true;}}
 function wizSetAuto(on){try{localStorage.setItem('kerntripWizAuto',on?'1':'0');}catch(_){}}
 // Called after every completed analysis (05/06):
-// new font -> open the assistant; final run -> jump to the Equilibrium tab.
+// after the wizard's own final run -> jump to the Equilibrium tab.
 function wizMaybeAutoOpen(){
   if(wizFinishPending){wizFinishPending=false;wizClose();switchTab('equi');return;}
-  const key=(typeof lastFontKey!=='undefined'&&lastFontKey)?lastFontKey:fontName;
-  if(!key||key===_wizSeenFont)return;
-  _wizSeenFont=key;
-  if(!wizAutoEnabled())return;
-  if(!glyphCache||!Object.keys(glyphCache).length)return;
-  wizOpen();
 }
 
 function wizOpen(){

@@ -327,11 +327,27 @@ class _KernTripNavDelegate(NSObject):
                     _dbg('kerntripDispatch_:applykerning _apply_kerning returned')
                 elif cmd == 'applyspacing':
                     try:
-                        items = json.loads(urllib.parse.unquote(query)) if query else []
+                        payload = json.loads(urllib.parse.unquote(query)) if query else []
                     except Exception as pe:
                         print('[KernTrip] applyspacing parse error: %s' % pe)
-                        items = []
-                    dialog._apply_spacing(items)
+                        payload = []
+                    # New format: {items: […], unit: N} — unit is the module
+                    # value for the master's unitizerUnit custom parameter.
+                    # Old ui.html builds send a bare items array.
+                    if isinstance(payload, dict):
+                        items = payload.get('items') or []
+                        unit  = payload.get('unit')
+                    else:
+                        items, unit = payload, None
+                    dialog._apply_spacing(items, unit)
+                elif cmd == 'note':
+                    try:
+                        payload = json.loads(urllib.parse.unquote(query)) if query else {}
+                        lines = payload.get('lines') or []
+                    except Exception as pe:
+                        print('[KernTrip] note parse error: %s' % pe)
+                        lines = []
+                    dialog._append_note(lines)
                 elif cmd == 'resize':
                     try:
                         params = dict(p.split('=') for p in query.split('&') if '=' in p)
@@ -565,15 +581,36 @@ class KernTripDialog(object):
             print('[KernTrip] serialized %d glyphs (%d skipped)' % (len(glyphs_data), skipped))
             self._js('setLoadProgress(32,"Serializing JSON…")')
 
+            # space/nbspace have no outline, so the loop above always skips
+            # them (paths_py empty) — resolve name + current width directly
+            # (name first, Glyphs' own canonical naming; unicode as fallback
+            # for custom-named glyphs) so Spacing Corrections can size them
+            # off "i" (09-spacing.js / applySpacingToGlyphs in 07-output.js).
+            space_glyphs = {}
+            for key, gname, uni_hex in (('sp', 'space', '0020'), ('nbsp', 'nbspace', '00A0')):
+                g = font.glyphs[gname]
+                if g is None:
+                    for cand in all_glyphs:
+                        if (cand.unicode or '').upper() == uni_hex:
+                            g = cand
+                            break
+                if g is None:
+                    continue
+                layer = g.layers[master_id]
+                if layer is None:
+                    continue
+                space_glyphs[key] = {'name': str(g.name), 'advanceWidth': float(layer.width or 0)}
+
             xh = getattr(master, 'xHeight', None)
             data = {
-                'upm':        float(font.upm),
-                'yBot':       float(master.descender),
-                'yTop':       float(master.ascender),
-                'xHeight':    float(xh) if xh else None,
-                'fontName':   font.familyName or '',
-                'masterName': master.name     or '',
-                'glyphs':     glyphs_data,
+                'upm':         float(font.upm),
+                'yBot':        float(master.descender),
+                'yTop':        float(master.ascender),
+                'xHeight':     float(xh) if xh else None,
+                'fontName':    font.familyName or '',
+                'masterName':  master.name     or '',
+                'glyphs':      glyphs_data,
+                'spaceGlyphs': space_glyphs,
             }
             json_str = json.dumps(data)
             kb = len(json_str) // 1024
@@ -657,6 +694,13 @@ class KernTripDialog(object):
                 'showApplyResult && showApplyResult(%s)' % json.dumps({'ok': ok, 'msg': summary}),
                 None)
             Message(summary, 'KernTrip — Done')
+            # Kerning assigned to the font — close the window. Runs on a
+            # fresh runloop tick (kerntripDispatch_'s deferred dispatch), not
+            # nested inside a WKWebView navigation callback, so _cleanup()'s
+            # webview/window teardown is safe here (see openKernTrip_, the
+            # only other caller).
+            if ok > 0:
+                self._cleanup()
         except Exception:
             _dbg('_apply_kerning — EXCEPTION (see traceback below)')
             traceback.print_exc()
@@ -685,7 +729,24 @@ class KernTripDialog(object):
         except Exception:
             traceback.print_exc()
 
-    def _apply_spacing(self, items):
+    def _append_note(self, lines):
+        """Append a multi-line documentation block (e.g. the AutoParam result:
+        timestamp, max-equilibrium, palette parameters) to Font Info → Notes —
+        appended like _document_run, never replaced."""
+        try:
+            if not lines:
+                return
+            font = self._font
+            if font is None:
+                return
+            block = '\n'.join(str(l) for l in lines)
+            note  = font.note or ''
+            font.note = (note.rstrip() + '\n' + block) if note.strip() else block
+            print('[KernTrip] note appended: %s' % lines[0])
+        except Exception:
+            traceback.print_exc()
+
+    def _apply_spacing(self, items, unit=None):
         try:
             if not items:
                 return
@@ -728,12 +789,26 @@ class KernTripDialog(object):
 
             summary = 'Applied spacing for %d glyphs → master "%s" (%s).' % (
                 ok, master.name, font.familyName or 'Untitled')
+
+            # Document the module on the master: assignment to customParameters
+            # updates an existing unitizerUnit or creates it if missing.
+            if unit is not None:
+                try:
+                    master.customParameters['unitizerUnit'] = int(unit)
+                    summary += ' unitizerUnit = %d.' % int(unit)
+                except Exception:
+                    traceback.print_exc()
+
             print('[KernTrip] ' + summary)
             self._webview.evaluateJavaScript_completionHandler_(
                 'showSpacingApplyResult && showSpacingApplyResult(%s)' % json.dumps(
                     {'ok': ok, 'msg': summary}),
                 None)
             Message(summary, 'KernTrip — Done')
+            # Spacing assigned to the font — close the window (see the
+            # matching comment in _apply_kerning for why this is safe here).
+            if ok > 0:
+                self._cleanup()
         except Exception:
             traceback.print_exc()
 

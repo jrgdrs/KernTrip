@@ -44,7 +44,7 @@
   <div class="params-section">
     <div class="sec">Parameters
       <button id="btn-wizard" class="sec-action" onclick="wizOpen()" title="Guided setup: set the design values step by step, looking at type samples">✦ Setup</button>
-      <button id="btn-autoparam" class="sec-action" onclick="autoParam()" title="Auto-detect optimal parameters for the loaded font by scanning Laufweite variance">⚙ AutoParam</button>
+      <button id="btn-autoparam" class="sec-action" onclick="autoParam()" title="Scan Smooth, Blur and Min gap (Zones fixed at 16) in 5 steps across their range, refined coarse-to-fine until max triple-equilibrium Δ < 10 fu (at most 6 rounds); the value with the lowest max Δ wins. Runs automatically after font load. Result (timestamp · max-equilibrium · palette parameters) is appended to Font Info → Notes in Glyphs; afterwards the setup assistant opens.">⚙ AutoParam</button>
       <select id="preset-params" class="sec-action" onchange="applyParamPreset(this.value)" style="cursor:pointer;padding:2px 5px;font-size:9px;margin-left:0">
         <option value="">↺ Presets</option>
         <option value="default">Default</option>
@@ -92,15 +92,15 @@
     </div>
 
     <div class="pr" data-light="show">
-      <div class="pl" data-tip="Bias: legible vs. readable&#10;&#10;One slider for the trade-off between legibility (clear separation of shapes) and readability (even rhythm). Replaces the old threshold.&#10;&#10;− (legible): contact model gets stronger (higher beta), min gap grows up to +50%, small tightenings are dropped more freely.&#10;+ (readable): air model gets stronger (lower beta), small loosenings are dropped more freely.&#10;&#10;Dropping: base tolerance 0.3% of UPM, up to 4x wider on the side you care less about. Capped and rhythmic pairs are never dropped.&#10;0 = neutral. Default: 0">
-        Bias <span style="color:var(--text3);font-style:italic;font-size:9px">(legible − · readable +)</span><span>--bias · −100 … +100</span>
+      <div class="pl" data-tip="Bias: legible vs. readable&#10;&#10;One slider for the trade-off between legibility (clear separation of shapes) and readability (even rhythm). Replaces the old threshold.&#10;&#10;− (legible): contact model gets stronger (higher beta), min gap grows up to +50%, small tightenings are dropped more freely.&#10;+ (readable): air model gets stronger (lower beta), small loosenings are dropped more freely.&#10;&#10;Dropping: base tolerance 0.3% of UPM, up to 4x wider on the side you care less about. Capped and rhythmic pairs are never dropped.&#10;0 = neutral. Default: 0&#10;&#10;Preview: ○ yellow ring = correction dropped by bias.">
+        Bias<i class="pvdot pv-ring"></i> <span style="color:var(--text3);font-style:italic;font-size:9px">(legible − · readable +)</span><span>--bias · −100 … +100</span>
       </div>
       <input type="number" id="p-bias" value="0" min="-100" max="100" step="10">
     </div>
 
     <div class="pr">
-      <div class="pl" data-tip="Min gap % (no touch)&#10;&#10;Minimum ink distance as % of UPM, checked on the raw outline (independent of Smooth/Glow) — as a true 2D distance field: Euclidean minimum distance over fine profiles, so it also catches serif corners and diagonal near-misses between measuring zones.&#10;&#10;Scales with Width; bias towards legible raises it up to +50%.&#10;&#10;0 = off.&#10;Default: 1">
-        Min gap % <span style="color:var(--text3);font-style:italic;font-size:9px">(no touch · 2D)</span><span>--mingap · % of UPM floor</span>
+      <div class="pl" data-tip="Min gap % (no touch)&#10;&#10;Minimum ink distance as % of UPM, checked on the raw outline (independent of Smooth/Glow) — as a true 2D distance field: Euclidean minimum distance over fine profiles, so it also catches serif corners and diagonal near-misses between measuring zones.&#10;&#10;Scales with Width; bias towards legible raises it up to +50%.&#10;&#10;0 = off.&#10;Default: 1&#10;&#10;Preview: ● red dot = pair held apart by the min gap.">
+        Min gap %<i class="pvdot pv-red"></i> <span style="color:var(--text3);font-style:italic;font-size:9px">(no touch · 2D)</span><span>--mingap · % of UPM floor</span>
       </div>
       <input type="number" id="p-mingap" value="1" min="0" max="100" step="0.5">
     </div>
@@ -113,8 +113,8 @@
     </div>
 
     <div class="pr" data-light="show">
-      <div class="pl" data-tip="Pair limit&#10;&#10;Maximum number of kerning pairs to generate, ranked by frequency of occurrence in real-world text (Andre Fuchs corpus).&#10;&#10;Set to 0 to generate all pairs.&#10;Default: 6400">
-        Pair limit <span style="color:var(--text3);font-style:italic;font-size:9px">(top N by frequency)</span><span>--pairs · 0 = all pairs</span>
+      <div class="pl" data-tip="Pair limit&#10;&#10;Maximum number of kerning pairs to generate, ranked by frequency of occurrence in real-world text (Andre Fuchs corpus).&#10;&#10;Set to 0 to generate all pairs.&#10;Default: 6400&#10;&#10;Preview: ● cyan dot = pair not in the kerning list.">
+        Pair limit<i class="pvdot pv-cyan"></i> <span style="color:var(--text3);font-style:italic;font-size:9px">(top N by frequency)</span><span>--pairs · 0 = all pairs</span>
       </div>
       <input type="number" id="p-pairlimit" value="6400" min="0">
     </div>

@@ -52,6 +52,11 @@ body.light-mode .pr:has(#p-lazy),
 body.light-mode .pr:has(#p-pairlimit) {display:none;}
 .pl{font-size:11.5px;color:var(--text2);padding-top:5px;cursor:help;position:relative;}
 .pl span{display:block;font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:1px;}
+/* Preview marker legend (same colors as the preview pair dots) */
+.pvdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:4px;vertical-align:middle;position:relative;top:-1px;box-shadow:0 0 0 1px rgba(0,0,0,.45);}
+.pvdot.pv-cyan{background:#50dcff;}
+.pvdot.pv-red{background:#ff4545;}
+.pvdot.pv-ring{width:6px;height:6px;border:1.5px solid #ffd700;background:transparent;}
 /* Tooltip */
 .pl[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:0;top:calc(100% + 4px);z-index:200;background:#151820;border:1px solid var(--border2);border-radius:4px;padding:7px 10px;font-size:11px;font-family:var(--sans);color:var(--text2);line-height:1.55;white-space:pre-wrap;width:230px;box-shadow:0 6px 20px rgba(0,0,0,.6);pointer-events:none;}
 

@@ -1,10 +1,22 @@
 // ══════════════════════════════════════════════════════
-// AUTOPARAM — automatic parameter detection
+// AUTOPARAM — parameter scan by triple equilibrium
 // ══════════════════════════════════════════════════════
+// Scans smooth, blur and mingap (zones fixed at 16; glow/glowblur, lazy
+// and round stay untouched — glow is off by default, lazy/round are style
+// choices). Each parameter is iterated in 5 even steps across its range;
+// the candidate with the lowest max triple-equilibrium Δ wins (lite
+// computation on the test-string glyphs, triples from the corpus pairs —
+// same construction as 15-equilibrium). Coarse-to-fine rounds: each round
+// re-scans a range halved around the previous optimum, until max Δ < 10 fu
+// (at most 6 rounds). Runs automatically after every font load; afterwards
+// the result is documented in Font Info → Notes (Glyphs mode) — timestamp,
+// max-equilibrium, palette parameters — and the optician window (setup
+// assistant, 16-wizard) opens.
 // Test text covers a broad mix of upper/lower, round/diagonal, straight shapes.
 const _AP_TEXT = 'Arrowroot Barley Chervil Dumpling Endive Flaxseed Garbanzo Hijiki Ishtu Jicama Kale Lychee Marjoram Nectarine Oxtail Pizza Quinoa Roquefort Squash Tofu Uppuma Vanilla Wheat Xergis Yogurt Zweiback';
 
 let _apRunning = false;
+let _apNotePending = false;
 
 // ── Field helpers ─────────────────────────────────────
 function _apSaveFields() {
@@ -48,6 +60,25 @@ function _apSetField(key, value) {
   else el.value = value;
 }
 
+// ── Scan candidates: 5 even steps across [lo, hi] ─────────────────────────────
+// _AP_RANGE holds the full scan domain per parameter (round 1); the input max
+// would be a validation limit, not a plausible design range (mingap up to
+// 100% of UPM, blur up to 50). Later rounds pass a narrowed [lo, hi].
+const _AP_RANGE = { smooth: [0, 99], blur: [1, 16], mingap: [0, 8] };
+const _AP_TARGET = 10;     // fu — stop as soon as max equilibrium Δ drops below
+const _AP_ROUNDS_MAX = 6;  // hard cap on refinement rounds
+
+function _apSteps(key, lo, hi) {
+  const el = document.getElementById('p-' + key);
+  const st = parseFloat(el.step || '1') || 1;
+  const out = [];
+  for (let i = 0; i < 5; i++) {
+    const v = +(Math.round((lo + (hi - lo) * i / 4) / st) * st).toFixed(4);
+    if (!out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
 // ── Char map: char → {aw, charLabel} ─────────────────
 // Built once per font; stays valid across all scan iterations.
 function _apBuildCharMap() {
@@ -68,36 +99,45 @@ function _apBuildCharMap() {
       }
     }
   }
-  // Space advance width
-  if (IS_GLYPHS) {
-    const gname = unicodeToGlyphName[32];
-    const sp = gname ? glyphsByName[gname] : null;
-    map[' '] = { charLabel: ' ', aw: sp && sp.advanceWidth ? sp.advanceWidth : Math.round(currentUPM * 0.25) };
-  } else {
-    const sp = fontObj ? fontObj.charToGlyph(' ') : null;
-    map[' '] = { charLabel: ' ', aw: sp && sp.advanceWidth ? sp.advanceWidth : Math.round(currentUPM * 0.25) };
-  }
   return map;
 }
 
-// ── Laufweite: sum of AW + kerning for test string ────
-function _apWidth(charMap, corrMap) {
-  let width = 0, prev = null;
-  for (const ch of _AP_TEXT) {
-    const entry = charMap[ch];
-    if (!entry) { prev = null; continue; }
-    if (ch === ' ') { width += entry.aw; prev = null; continue; }
-    width += entry.aw;
-    if (prev) width += corrMap[prev.charLabel + '|' + entry.charLabel] || 0;
-    prev = entry;
+// ── Triples from the corpus pairs, restricted to test-string chars ────────────
+// Same construction as computeEquilibrium (15): top pairs → (A,B)+(B,C).
+// Built once per run; also returns the unique pairs the triples need.
+function _apBuildTriples(charMap) {
+  const TOPP = 400, MAXT = 800;
+  const byFirst = {}, top = [];
+  for (const pair of KERNING_PAIRS) {
+    if (top.length >= TOPP) break;
+    const c = [...pair];
+    if (c.length < 2) continue;
+    if (!charMap[c[0]] || !charMap[c[1]]) continue;
+    top.push(c);
+    (byFirst[c[0]] = byFirst[c[0]] || []).push(c[1]);
   }
-  return width;
+  const triples = [], pairSet = new Set(), seen = new Set();
+  outer:
+  for (const [a, b] of top) {
+    const nexts = byFirst[b];
+    if (!nexts) continue;
+    for (const c of nexts) {
+      const id = a + b + c;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      triples.push([a, b, c]);
+      pairSet.add(a + '|' + b);
+      pairSet.add(b + '|' + c);
+      if (triples.length >= MAXT) break outer;
+    }
+  }
+  return { triples, pairs: [...pairSet] };
 }
 
-// ── Lite analysis: only the glyphs and pairs the test string needs ────────────
-// No KERNING_PAIRS filter, no SC/OSF expansion, no UI updates.
-// Works in both browser mode (fontObj) and Glyphs mode (glyphsByName).
-async function _apLiteAnalysis(charMap) {
+// ── Lite equilibrium score for the current field values ───────────────────────
+// Margins for the test-string chars, corrections via the shared pair core
+// (03), then max Δ = |gapL − gapR| over the triples. Lower is better.
+async function _apEquiScore(charMap, tri) {
   await new Promise(r => setTimeout(r, 0)); // yield so log messages paint
 
   const p   = P();
@@ -106,7 +146,7 @@ async function _apLiteAnalysis(charMap) {
 
   // Margins for unique chars in test string + base glyphs
   const localGC = {};
-  const needed  = new Set([...Object.keys(charMap).filter(c => c !== ' '), p.baselc, p.baseuc]);
+  const needed  = new Set([...Object.keys(charMap), p.baselc, p.baseuc]);
 
   for (const ch of needed) {
     if (IS_GLYPHS) {
@@ -129,64 +169,95 @@ async function _apLiteAnalysis(charMap) {
   // shared pair core (03): same context as 05/06
   const ctx = buildPairCtx(p, localGC, upm, yBot, yTop, rhythmGridFromUI(p));
 
-  // Corrections for every unique consecutive pair in the test string —
-  // no KERNING_PAIRS filter, the test string defines the pairs directly.
-  const corrMap = {};
-  let prev = null;
-  for (const ch of _AP_TEXT) {
-    if (ch === ' ') { prev = null; continue; }
-    if (prev !== null) {
-      const key = prev + '|' + ch;
-      if (!(key in corrMap)) {
-        const gcA = localGC[prev], gcB = localGC[ch];
-        if (gcA && gcB) {
-          // shared pair core (03): the whole formula in one place
-          const r = pairCorrCore(gcA, gcB, p, ctx);
-          if (r) corrMap[key] = r.corr;
-        }
-      }
-    }
-    prev = ch;
+  const corrOf = {};
+  for (const key of tri.pairs) {
+    const [a, b] = key.split('|');
+    const gA = localGC[a], gB = localGC[b];
+    if (!gA || !gB) continue;
+    // shared pair core (03): the whole formula in one place
+    const r = pairCorrCore(gA, gB, p, ctx);
+    if (r) corrOf[key] = r.corr;
   }
-  return corrMap;
+
+  let maxErr = 0, n = 0;
+  for (const [a, b, c] of tri.triples) {
+    const gA = localGC[a], gB = localGC[b], gC = localGC[c];
+    if (!gA || !gB || !gC) continue;
+    const mL = pairMean(gA.right, gB.left), mR = pairMean(gB.right, gC.left);
+    if (!mL || !mR) continue;
+    const gapL = mL.mean + (corrOf[a + '|' + b] || 0);
+    const gapR = mR.mean + (corrOf[b + '|' + c] || 0);
+    const err  = Math.abs(gapL - gapR);
+    if (err > maxErr) maxErr = err;
+    n++;
+  }
+  return n ? maxErr : Infinity;
 }
 
-// ── Single scan iteration: set fields → lite analysis → Laufweite ────────────
-async function _apRun(base, optimal, paramKey, testValue, charMap) {
-  _apRestoreFields(base);
-  for (const [k, v] of Object.entries(optimal)) _apSetField(k, v);
-  _apSetField(paramKey, testValue);
-  const corrMap = await _apLiteAnalysis(charMap);
-  return _apWidth(charMap, corrMap);
-}
-
-// ── Scan one parameter across its candidate values ────────────────────────────
-// Returns the candidate whose Laufweite is closest to the lower average:
-// mean of all widths at or below the overall mean — the converged stable state.
-async function _apScan(label, paramKey, candidates, base, optimal, charMap, stepN, totalSteps) {
+// ── Scan one parameter: 5 steps, keep the lowest max equilibrium Δ ────────────
+async function _apScan(label, paramKey, candidates, base, optimal, charMap, tri, stepN, totalSteps) {
   const btn = document.getElementById('btn-autoparam');
   if (btn) btn.textContent = `⚙ ${label} (${stepN}/${totalSteps})`;
   log(`AutoParam ${stepN}/${totalSteps}: scanning ${label} [${candidates.join(', ')}]`, 'info');
 
-  const widths = [];
-  for (const v of candidates) {
-    const w = await _apRun(base, optimal, paramKey, v, charMap);
-    widths.push(w);
-    log(`  ${label}=${v} → Laufweite ${Math.round(w)} fu`, 'info');
-  }
-
-  const globalMean = widths.reduce((s, w) => s + w, 0) / widths.length;
-  const below      = widths.filter(w => w <= globalMean);
-  const lowerAvg   = below.length ? below.reduce((s, w) => s + w, 0) / below.length : globalMean;
-  let bestIdx = 0, bestDiff = Infinity;
+  let bestIdx = 0, bestScore = Infinity;
   for (let i = 0; i < candidates.length; i++) {
-    const d = Math.abs(widths[i] - lowerAvg);
-    if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+    _apRestoreFields(base);
+    for (const [k, v] of Object.entries(optimal)) _apSetField(k, v);
+    _apSetField(paramKey, candidates[i]);
+    const score = await _apEquiScore(charMap, tri);
+    log(`  ${label}=${candidates[i]} → max equilibrium Δ ${r1(score)} fu`, 'info');
+    if (score < bestScore) { bestScore = score; bestIdx = i; }
   }
 
-  const best = candidates[bestIdx];
-  log(`AutoParam ${stepN}/${totalSteps}: ${label} → ${best} (Laufweite ${Math.round(widths[bestIdx])} fu, lower avg ${Math.round(lowerAvg)} fu)`, 'ok');
-  return best;
+  log(`AutoParam ${stepN}/${totalSteps}: ${label} → ${candidates[bestIdx]} (max Δ ${r1(bestScore)} fu)`, 'ok');
+  return { best: candidates[bestIdx], score: bestScore };
+}
+
+// ── Run documentation: Font Info → Notes block ────────────────────────────────
+// Palette parameters in panel order, as menu values.
+function _apPaletteLine() {
+  const p = P();
+  return `width ${p.width}, stemgap ${p.stemgap}, rhythm ${p.rhythm ? 'on' : 'off'}, ` +
+         `lazy ${p.lazy}, bias ${p.bias}, mingap ${+(p.mingap * 100).toFixed(1)}, ` +
+         `round ${p.round}, pairlimit ${p.pairlimit}`;
+}
+
+// Called from the end of 05/06 (like wizMaybeAutoOpen), two duties:
+// 1. After the full analysis that AutoParam itself triggered: equiData holds
+//    the real equilibrium — document timestamp, result and palette parameters
+//    as an appended note block, then open the optician window (setup
+//    assistant; respects its "open automatically" preference).
+// 2. After the first analysis of a freshly loaded font: start AutoParam
+//    automatically — the flow is load → AutoParam → optician window.
+let _apSeenFont = '';
+function apAfterAnalysis() {
+  if (_apNotePending) {
+    _apNotePending = false;
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const maxE  = (typeof equiData !== 'undefined' && equiData.length) ? equiData[0].err : null;
+    const lines = [
+      `[KernTrip AutoParam] ${stamp}`,
+      `max-equilibrium ${maxE != null ? maxE : 'n/a'}`,
+      _apPaletteLine(),
+    ];
+    for (const l of lines) log(l, 'ok');
+    if (IS_GLYPHS) {
+      window.location.href = 'kerntrip://note?' + encodeURIComponent(JSON.stringify({ lines }));
+    }
+    const wizAuto = typeof wizAutoEnabled === 'function' ? wizAutoEnabled() : true;
+    if (wizAuto && typeof wizOpen === 'function') wizOpen();
+    return;
+  }
+  // fresh font? (same key logic as the wizard: font+master, fontName fallback)
+  const key = (typeof lastFontKey !== 'undefined' && lastFontKey) ? lastFontKey : fontName;
+  if (!key || key === _apSeenFont) return;
+  _apSeenFont = key;
+  if (!glyphCache || !Object.keys(glyphCache).length) return;
+  if (_apRunning) return;
+  log('AutoParam: starting automatically after font load…', 'info');
+  setTimeout(() => autoParam(), 0);
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
@@ -213,26 +284,53 @@ async function autoParam() {
   try {
     const base    = _apSaveFields();
     const charMap = _apBuildCharMap();
-    const mapped  = Object.keys(charMap).length - 1; // exclude space
+    const mapped  = Object.keys(charMap).length;
     if (mapped === 0) { log('AutoParam: no test-string glyphs found in font', 'err'); return; }
-    log(`AutoParam: ${mapped} unique chars, lite analysis (no KERNING_PAIRS lookup)`, 'info');
+    const tri = _apBuildTriples(charMap);
+    if (!tri.triples.length) { log('AutoParam: no corpus triples possible with this font', 'err'); return; }
+    log(`AutoParam: ${mapped} unique chars, ${tri.triples.length} triples (${tri.pairs.length} pairs) — criterion: lowest max equilibrium Δ`, 'info');
 
-    const optimal = {};
-    const TOTAL   = 7;   // bias is a style choice, not a scan parameter
+    // zones is fixed at 16, glow/glowblur stay off, lazy/round/bias are
+    // style choices — only the measuring trio is scanned, coarse-to-fine:
+    // round 1 covers the full _AP_RANGE, each later round halves the range
+    // around the previous optimum. Iterates until max Δ < _AP_TARGET fu,
+    // at most _AP_ROUNDS_MAX rounds; converged ranges are skipped.
+    const PARAMS  = [['Smooth', 'smooth'], ['Blur', 'blur'], ['MinGap', 'mingap']];
+    const TOTAL   = PARAMS.length * _AP_ROUNDS_MAX;
+    const optimal = { zones: 16 };
+    const range   = {};
+    for (const [, key] of PARAMS) range[key] = _AP_RANGE[key].slice();
 
-    optimal.zones     = await _apScan('Zones',     'zones',     [3,9,18,36,48,96],  base, optimal, charMap, 1, TOTAL);
-    optimal.smooth    = await _apScan('Smooth',    'smooth',    [11,33,50,66,88],   base, optimal, charMap, 2, TOTAL);
-    optimal.blur      = await _apScan('Blur',      'blur',      [1,2,4,8,16],       base, optimal, charMap, 3, TOTAL);
-    optimal.glowblur  = await _apScan('GlowBlur',  'glowblur',  [0,1,2,3,4,5],     base, optimal, charMap, 4, TOTAL);
-    optimal.round     = await _apScan('Round',     'round',     [1,5,10,20,40],     base, optimal, charMap, 5, TOTAL);
-    optimal.lazy      = await _apScan('Lazy',      'lazy',      [0,20,40,60,80],    base, optimal, charMap, 6, TOTAL);
-    optimal.mingap    = await _apScan('MinGap',    'mingap',    [0,1,2,4,6,8],      base, optimal, charMap, 7, TOTAL);
+    let stepN = 0, score = Infinity;
+    scan:
+    for (let round = 1; round <= _AP_ROUNDS_MAX; round++) {
+      let scanned = 0;
+      for (const [label, key] of PARAMS) {
+        stepN++;
+        const cands = _apSteps(key, range[key][0], range[key][1]);
+        if (cands.length < 2) { log(`AutoParam ${stepN}/${TOTAL}: ${label} range converged (${cands[0]})`, 'info'); continue; }
+        scanned++;
+        const r = await _apScan(`${label} R${round}`, key, cands, base, optimal, charMap, tri, stepN, TOTAL);
+        optimal[key] = r.best;
+        score = r.score;
+        // refine: next round scans half the span, centered on the optimum
+        const half = (range[key][1] - range[key][0]) / 4;
+        const [blo, bhi] = _AP_RANGE[key];
+        range[key] = [Math.max(blo, r.best - half), Math.min(bhi, r.best + half)];
+        if (score < _AP_TARGET) { log(`AutoParam: target reached — max Δ ${r1(score)} fu < ${_AP_TARGET} fu`, 'ok'); break scan; }
+      }
+      if (!scanned) { log('AutoParam: all ranges converged — stopping', 'info'); break; }
+    }
+    if (score >= _AP_TARGET) log(`AutoParam: scan finished at max Δ ${r1(score)} fu (target ${_AP_TARGET} fu not reached)`, 'info');
 
     // Apply all optimal values, then trigger the full analysis to refresh the UI
     if (btn) btn.textContent = '⚙ Applying…';
     _apRestoreFields(base);
     for (const [k, v] of Object.entries(optimal)) _apSetField(k, v);
     log('AutoParam: optimal parameters applied — running full analysis…', 'ok');
+    // apMaybeDocument (hook at the end of 05/06) writes the note block once
+    // the full analysis — and with it the real equilibrium — is done.
+    _apNotePending = true;
     // In Glyphs mode runAnalysis() navigates to Python and returns immediately;
     // the panel is restored in finally so the user sees params while Python responds.
     runAnalysis();
@@ -247,4 +345,4 @@ async function autoParam() {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { autoParam };
+if (typeof module !== 'undefined') module.exports = { autoParam, apAfterAnalysis };

@@ -30,21 +30,17 @@ const WIZ_STEPS=[
 ];
 
 let wizIdx=0,wizVals={},wizRhythm=true,wizSel={},wizL2K=null;
-let _wizSeenFont='',wizFinishPending=false,wizAutoNote='';
+let wizFinishPending=false,wizAutoNote='';
 
-// ── Auto-open after font load (can be turned off via localStorage) ──
+// ── Auto-open preference (can be turned off via localStorage) ──
+// The open itself now happens after AutoParam: load → AutoParam → assistant
+// (apAfterAnalysis in 14 checks wizAutoEnabled and calls wizOpen).
 function wizAutoEnabled(){try{return localStorage.getItem('kerntripWizAuto')!=='0';}catch(_){return true;}}
 function wizSetAuto(on){try{localStorage.setItem('kerntripWizAuto',on?'1':'0');}catch(_){}}
 // Called after every completed analysis (05/06):
-// new font -> open the assistant; final run -> jump to the Equilibrium tab.
+// after the wizard's own final run -> jump to the Equilibrium tab.
 function wizMaybeAutoOpen(){
   if(wizFinishPending){wizFinishPending=false;wizClose();switchTab('equi');return;}
-  const key=(typeof lastFontKey!=='undefined'&&lastFontKey)?lastFontKey:fontName;
-  if(!key||key===_wizSeenFont)return;
-  _wizSeenFont=key;
-  if(!wizAutoEnabled())return;
-  if(!glyphCache||!Object.keys(glyphCache).length)return;
-  wizOpen();
 }
 
 function wizOpen(){
