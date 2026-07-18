@@ -279,7 +279,7 @@ body.light-mode #btn-light-act,body.light-mode #btn-light-group{display:block;}
 <header>
   <div class="header-title">
     <div class="logo-mark" ondblclick="toggleLightMode()" title="Double-click to switch panel mode" style="cursor:pointer;user-select:none">KernTrip</div>
-    <span style="font-size:9px;color:var(--text);margin-left:4px;opacity:.7" name="version">v0.6.1</span>
+    <span style="font-size:9px;color:var(--text);margin-left:4px;opacity:.7" name="version">v0.6.5</span>
   </div>
   <div class="header-sep"></div>
   <div class="header-font-info" id="header-font-info">No font loaded</div>
@@ -2450,10 +2450,12 @@ document.addEventListener('keydown',e=>{
 /**
  * Target margins per class come from the base glyphs (o/O). Five rules:
  *   1. The base glyph itself is centered: LSB = RSB (exact, no module
- *      rounding), advance width unchanged. "LSB/RSB" here means the ink
- *      extent at half the x-height (halfXhSB), not the true geometric
- *      minimum — that avoids letting serifs (near baseline/cap-height)
- *      or hooks/overshoots skew what should be a stem-width reading.
+ *      rounding — snapping its own AW to the grid was tried and reverted,
+ *      it visibly pulled the base off-center, which defeats the point of
+ *      "everything else is based on the base"). "LSB/RSB" here means the
+ *      ink extent at half the x-height (halfXhSB), not the true geometric
+ *      minimum — that avoids letting serifs (near baseline/cap-height) or
+ *      hooks/overshoots skew what should be a stem-width reading.
  *   2. Its centering offset shifts the class targets, so every other
  *      glyph inherits the same offset and keeps fitting the base.
  *   3. Sidebearings never go negative: the negative side is pinned at 0
@@ -2479,6 +2481,10 @@ document.addEventListener('keydown',e=>{
  * computeSpacingRows() is the single source — table (renderSpacingTable)
  * and Apply Spacing (07) both consume its rows.
  */
+// Two-decimal rounding for the New L / New R columns — finer than the
+// general-purpose r1 (1 decimal) used elsewhere, since this table is where
+// the sub-unit sidebearing precision actually matters to the reader.
+function r2(v){return Math.round(v*100)/100;}
 function avgMargin(arr){
   let sum=0,cnt=0;
   for(const v of arr)if(v!==null){sum+=v;cnt++;}
@@ -2606,7 +2612,7 @@ function computeSpacingRows(){
       }
     }
     const dAW=newAW-oldAW;
-    rows.push({gk,gc,oldAW,newAW,dAW,dL,dR,newL:r1(gL+dL),newR:r1(gR+dR)});
+    rows.push({gk,gc,oldAW,newAW,dAW,dL:r2(dL),dR:r2(dR),newL:r2(gL+dL),newR:r2(gR+dR)});
   }
 
   // Narrow glyphs (period, comma, dots, j …): first examine the RESULTING
@@ -2639,7 +2645,7 @@ function computeSpacingRows(){
       const trueL=geomSB(r.gc.leftFine??r.gc.leftGeom),trueR=geomSB(r.gc.rightFine??r.gc.rightGeom);
       if(trueL!==null&&trueL+dL<0){const deficit=-(trueL+dL);dL+=deficit;dR-=deficit;}
       if(trueR!==null&&trueR+dR<0){const deficit=-(trueR+dR);dR+=deficit;dL-=deficit;}
-      r.dL=dL;r.dR=dR;r.newL=r1(s.l+dL);r.newR=r1(s.r+dR);
+      r.dL=r2(dL);r.dR=r2(dR);r.newL=r2(s.l+dL);r.newR=r2(s.r+dR);
       // r.newAW / r.dAW intentionally untouched — only the L/R split moves
     }
   }

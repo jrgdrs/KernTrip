@@ -814,13 +814,24 @@ class KernTripDialog(object):
                         except Exception as e:
                             print('[KernTrip] group %s on %s: %s' % (name, gname, e))
 
-                # 3. Class-class kerning values.
+                # 3. Class-class kerning values. Glyphs' internal @MMK_
+                #    prefixes are the reverse of what the property names
+                #    suggest: a glyph's rightKerningGroup (used when it's
+                #    the first/left glyph of a pair) is looked up as
+                #    "@MMK_L_<name>", and a glyph's leftKerningGroup (used
+                #    when it's the second/right glyph) as "@MMK_R_<name>" —
+                #    confirmed against the official setKerningForPair
+                #    example (font.setKerningForPair(id, '@MMK_L_T',
+                #    '@MMK_R_A', value) kerns group T on the left against
+                #    group A on the right). right_name here names the
+                #    rightKerningGroup class (the pair's left glyph), so it
+                #    takes the "@MMK_L_" prefix, and vice versa.
                 for ce in class_entries:
                     try:
                         right_name = local_to_name[ce['rightLocalId']]
                         left_name  = local_to_name[ce['leftLocalId']]
                         font.setKerningForPair(
-                            master_id, '@MMK_R_' + right_name, '@MMK_L_' + left_name,
+                            master_id, '@MMK_L_' + right_name, '@MMK_R_' + left_name,
                             int(ce['value']))
                         ok += 1
                     except Exception as e:
