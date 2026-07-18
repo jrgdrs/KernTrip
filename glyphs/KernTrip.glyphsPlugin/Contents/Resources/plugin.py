@@ -11,6 +11,7 @@ import gc
 import json
 import objc
 import os
+import re
 import time
 import traceback
 import urllib.parse
@@ -325,6 +326,17 @@ class _KernTripNavDelegate(NSObject):
                     _dbg('kerntripDispatch_:applykerning json.loads done — pairs=%d' % len(pairs))
                     dialog._apply_kerning(pairs, params)
                     _dbg('kerntripDispatch_:applykerning _apply_kerning returned')
+                elif cmd == 'applygroupkerning':
+                    try:
+                        payload = json.loads(urllib.parse.unquote(query)) if query else {}
+                    except Exception as pe:
+                        print('[KernTrip] applygroupkerning parse error: %s' % pe)
+                        payload = {}
+                    groups        = payload.get('groups') or []
+                    class_entries = payload.get('classEntries') or []
+                    pairs         = payload.get('pairs') or []
+                    params        = payload.get('params') or ''
+                    dialog._apply_group_kerning(groups, class_entries, pairs, params)
                 elif cmd == 'applyspacing':
                     try:
                         payload = json.loads(urllib.parse.unquote(query)) if query else []
@@ -710,6 +722,136 @@ class KernTripDialog(object):
                 self._cleanup()
         except Exception:
             _dbg('_apply_kerning — EXCEPTION (see traceback below)')
+            traceback.print_exc()
+
+    _GROUP_NAME_RE = re.compile(r'^G(\d+)$')
+
+    def _next_group_counter(self, font):
+        """Highest existing 'G<digits>' kerning-group name in the whole font
+        (any glyph, either side), +1. Kerning groups are a glyph property
+        shared across every master, so other masters may already depend on
+        groups from an earlier run (or from outside KernTrip) — new groups
+        always continue this counter instead of reusing or deleting one."""
+        max_n = 0
+        for g in font.glyphs:
+            for name in (g.rightKerningGroup, g.leftKerningGroup):
+                if not name:
+                    continue
+                m = self._GROUP_NAME_RE.match(name)
+                if m:
+                    max_n = max(max_n, int(m.group(1)))
+        return max_n + 1
+
+    def _apply_group_kerning(self, groups, class_entries, pairs, params=''):
+        """'With Kerning Groups': compress the pair list into kerning classes.
+
+        JS (buildGroupKerning, 07-output.js) already decided the classing —
+        glyphs sharing an identical real sidebearing form a class on that
+        side, and a class-class entry replaces its members' pairs only
+        where they agree on the value; it hands over local group ids, not
+        final names. Kerning groups are a glyph property shared across
+        every master in the font, so other masters may already rely on
+        existing group names — this method never deletes or renames an
+        existing group; it only assigns the new classes' final "G000N"
+        names, continuing past whatever number is already the highest in
+        the font. Only this master's plain kerning table is cleared before
+        writing (that part stays master-scoped, same as a normal Apply)."""
+        try:
+            _dbg('_apply_group_kerning entry — groups=%d classEntries=%d pairs=%d' % (
+                len(groups), len(class_entries), len(pairs)))
+            if not groups and not class_entries and not pairs:
+                return
+            font, master = self._apply_target()
+            if font is None or master is None:
+                return
+            from AppKit import NSAlert, NSAlertFirstButtonReturn
+            n_class, n_pairs = len(class_entries), len(pairs)
+            alert = NSAlert.alloc().init()
+            alert.setMessageText_('With Kerning Groups — %s' % master.name)
+            alert.setInformativeText_(
+                'Write %d class pair%s + %d individual exception%s into master '
+                '"%s" of "%s"?\n\n'
+                'New kerning groups are added — existing groups (used by '
+                'other masters too) are left untouched. Only this master\'s '
+                'kerning table is replaced.' % (
+                    n_class, '' if n_class == 1 else 's',
+                    n_pairs, '' if n_pairs == 1 else 's',
+                    master.name, font.familyName or 'Untitled'))
+            alert.addButtonWithTitle_('Apply')
+            alert.addButtonWithTitle_('Cancel')
+            if alert.runModal() != NSAlertFirstButtonReturn:
+                _dbg('_apply_group_kerning — user cancelled')
+                return
+
+            master_id = master.id
+            ok        = 0
+            try:   font.disableUpdateInterface()
+            except AttributeError: pass
+            try:
+                # 1. Clear only this master's kerning table (master-scoped,
+                #    same as a plain Apply) — never touch group assignments.
+                try:    del font.kerning[master_id]
+                except (KeyError, Exception): pass
+
+                # 2. Name every new class, continuing past the font's
+                #    current highest "G<digits>" group name.
+                counter = self._next_group_counter(font)
+                local_to_name = {}
+                for grp in groups:
+                    name = 'G%04d' % counter
+                    counter += 1
+                    local_to_name[grp.get('localId')] = name
+                    side = grp.get('side')
+                    for gname in (grp.get('glyphs') or []):
+                        glyph = font.glyphs[gname]
+                        if glyph is None:
+                            continue
+                        try:
+                            if side == 'right':
+                                glyph.rightKerningGroup = name
+                            else:
+                                glyph.leftKerningGroup = name
+                        except Exception as e:
+                            print('[KernTrip] group %s on %s: %s' % (name, gname, e))
+
+                # 3. Class-class kerning values.
+                for ce in class_entries:
+                    try:
+                        right_name = local_to_name[ce['rightLocalId']]
+                        left_name  = local_to_name[ce['leftLocalId']]
+                        font.setKerningForPair(
+                            master_id, '@MMK_R_' + right_name, '@MMK_L_' + left_name,
+                            int(ce['value']))
+                        ok += 1
+                    except Exception as e:
+                        print('[KernTrip] class pair %s: %s' % (ce, e))
+
+                # 4. Remaining individual / exception pairs.
+                for pair in pairs:
+                    try:
+                        font.setKerningForPair(
+                            master_id, pair['left'], pair['right'], int(pair['correction']))
+                        ok += 1
+                    except Exception as e:
+                        print('[KernTrip] pair %s %s: %s' % (
+                            pair.get('left', '?'), pair.get('right', '?'), e))
+            finally:
+                try:   font.enableUpdateInterface()
+                except AttributeError: pass
+
+            summary = 'With Kerning Groups: %d class pairs + %d individual → master "%s" (%s).' % (
+                n_class, n_pairs, master.name, font.familyName or 'Untitled')
+            _dbg('_apply_group_kerning — done: ' + summary)
+            print('[KernTrip] ' + summary)
+            self._document_run(master, ok, params)
+            self._webview.evaluateJavaScript_completionHandler_(
+                'showApplyResult && showApplyResult(%s)' % json.dumps({'ok': ok, 'msg': summary}),
+                None)
+            Message(summary, 'KernTrip — Done')
+            if ok > 0:
+                self._cleanup()
+        except Exception:
+            _dbg('_apply_group_kerning — EXCEPTION (see traceback below)')
             traceback.print_exc()
 
     def _document_run(self, master, ok, params):

@@ -16,5 +16,10 @@ zip -qr KernTrip.zip glyphs/ -x "*.DS_Store"
 
 # Install into Glyphs 3 (reload the plugin in Glyphs afterwards)
 cp -R glyphs/KernTrip.glyphsPlugin ~/Library/Application\ Support/Glyphs\ 3/Plugins/
-
 echo "KernTrip built -> index.html / KernTrip.zip / installed into Glyphs 3 Plugins"
+
+# Install into Glyphs 4 (reload the plugin in Glyphs afterwards)
+cp -R glyphs/KernTrip.glyphsPlugin ~/Library/Application\ Support/Glyphs\ 4/Plugins/
+echo "KernTrip built -> index.html / KernTrip.zip / installed into Glyphs 4 Plugins"
+
+

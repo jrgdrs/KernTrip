@@ -107,6 +107,7 @@ body.ap-running #btn-run,
 body.ap-running #btn-light-recompute,
 body.ap-running #btn-light-clip,
 body.ap-running #btn-light-act,
+body.ap-running #btn-light-group,
 body.ap-running .stats,
 body.ap-running .log-resize{display:none;}
 body.ap-running .logbox{flex:1;height:auto;border-top:none;}
@@ -256,13 +257,14 @@ body.light-mode .params-section{order:4;padding-top:8px;}
 body.light-mode #btn-light-recompute{order:5;display:block;}
 body.light-mode #btn-light-clip{order:6;display:block;}
 body.light-mode #btn-light-act{order:7;}
+body.light-mode #btn-light-group{order:8;}
 body.light-mode #light-cad-label,body.light-mode #light-cad-val{display:none;}
-#btn-light-act,#btn-light-clip{display:none;margin:0 10px 7px;width:calc(100% - 20px);padding:9px;background:rgba(232,160,32,.12);color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border:1px solid var(--accent);border-radius:var(--r);cursor:pointer;transition:all .15s;flex-shrink:0;}
-#btn-light-act{margin-bottom:12px;}
-#btn-light-act:hover,#btn-light-clip:hover{background:rgba(232,160,32,.26);}
-#btn-light-act:active,#btn-light-clip:active{transform:scale(.98);}
-#btn-light-act:disabled,#btn-light-clip:disabled{background:transparent;color:var(--text3);border-color:var(--border2);cursor:not-allowed;}
-body.light-mode #btn-light-act{display:block;}
+#btn-light-act,#btn-light-clip,#btn-light-group{display:none;margin:0 10px 7px;width:calc(100% - 20px);padding:9px;background:rgba(232,160,32,.12);color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border:1px solid var(--accent);border-radius:var(--r);cursor:pointer;transition:all .15s;flex-shrink:0;}
+#btn-light-act,#btn-light-group{margin-bottom:12px;}
+#btn-light-act:hover,#btn-light-clip:hover,#btn-light-group:hover{background:rgba(232,160,32,.26);}
+#btn-light-act:active,#btn-light-clip:active,#btn-light-group:active{transform:scale(.98);}
+#btn-light-act:disabled,#btn-light-clip:disabled,#btn-light-group:disabled{background:transparent;color:var(--text3);border-color:var(--border2);cursor:not-allowed;}
+body.light-mode #btn-light-act,body.light-mode #btn-light-group{display:block;}
 #light-cadence-row{display:none;}
 #light-cad-canvas{display:block;width:100%;height:160px;border-radius:var(--r);background:#141618;}
 #btn-light-recompute{display:none;margin:0 10px 7px;width:calc(100% - 20px);padding:9px;background:var(--accent);color:#000;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border:none;border-radius:var(--r);cursor:pointer;transition:background .15s,transform .1s;flex-shrink:0;}
@@ -277,7 +279,7 @@ body.light-mode #btn-light-act{display:block;}
 <header>
   <div class="header-title">
     <div class="logo-mark" ondblclick="toggleLightMode()" title="Double-click to switch panel mode" style="cursor:pointer;user-select:none">KernTrip</div>
-    <span style="font-size:9px;color:var(--text);margin-left:4px;opacity:.7" name="version">v0.5.2</span>
+    <span style="font-size:9px;color:var(--text);margin-left:4px;opacity:.7" name="version">v0.6.1</span>
   </div>
   <div class="header-sep"></div>
   <div class="header-font-info" id="header-font-info">No font loaded</div>
@@ -463,6 +465,7 @@ body.light-mode #btn-light-act{display:block;}
   <button id="btn-light-recompute" disabled onclick="guardedAction(runAnalysis)">↺ Recompute</button>
   <button id="btn-light-clip" disabled onclick="copyKerningToClipboard()">⎘ Kerning to Clipboard</button>
   <button id="btn-light-act" disabled onclick="exportCSV()">↓ Export CSV</button>
+  <button id="btn-light-group" disabled style="display:none" onclick="applyGroupKerningToGlyphs()" title="Compress the kerning table into classes: glyphs with identical sidebearings collapse into one kerning group, cutting the pair count. Adds new groups without touching existing ones (other masters may share them).">⊙ With Kerning Groups</button>
   <div class="log-resize" id="log-resize"></div>
   <div class="logbox" id="logbox"></div>
 </div>
@@ -540,6 +543,7 @@ body.light-mode #btn-light-act{display:block;}
       <button class="filter-mode" id="rx-btn" onclick="toggleRegex()" title="Toggle regex mode">.*</button>
       <button id="pair-preview-btn" class="tbtn" onclick="togglePairPreview()" title="Toggle pair preview mode (also: Esc)">⊙ Pair</button>
       <button class="btn-exp" onclick="exportCSV()">↓ Export</button>
+      <button class="btn-exp" id="btn-group-kerning" onclick="applyGroupKerningToGlyphs()" style="display:none" title="Compress the kerning table into classes: glyphs with identical sidebearings collapse into one kerning group, cutting the pair count. Adds new groups without touching existing ones (other masters may share them).">⊙ With Kerning Groups</button>
     </div>
     <div class="filter-group" id="spacing-filter-group" style="display:none">
       <button class="btn-exp" id="btn-apply-spacing" onclick="applySpacingToGlyphs()" style="display:none">⊙ Apply Spacing</button>
@@ -547,6 +551,7 @@ body.light-mode #btn-light-act{display:block;}
     <div class="filter-group" id="cadence-filter-group" style="display:none"></div>
     <div class="filter-group" id="equi-filter-group" style="display:none">
       <button class="btn-exp" id="btn-apply-kerning-equi" onclick="applyToGlyphs()" style="display:none">⊙ Apply Kerning to Glyphs</button>
+      <button class="btn-exp" id="btn-group-kerning-equi" onclick="applyGroupKerningToGlyphs()" style="display:none" title="Compress the kerning table into classes: glyphs with identical sidebearings collapse into one kerning group, cutting the pair count. Adds new groups without touching existing ones (other masters may share them).">⊙ With Kerning Groups</button>
     </div>
   </div>
   <div class="tbl-wrap" id="kern-panel">
@@ -2144,6 +2149,95 @@ function showApplyResult(result){
   setStatus(result.msg, result.ok>0?'active':'error');
 }
 
+// ── GROUP KERNING ─────────────────────────────────────
+// Compresses individual pairs into kerning classes: a glyph's real ink
+// sidebearing (geomSB — the same "true geometric minimum" reading
+// 09-spacing.js centers glyphs on) decides its class on that side, once,
+// independent of any single pair — so a glyph never needs two different
+// classes at the same time and grouping can never silently misassign a
+// pair. Left glyphs sharing an identical right-side sidebearing become one
+// right-class; right glyphs sharing an identical left-side sidebearing
+// become one left-class. Wherever a class-pair's members overwhelmingly
+// agree on one correction value, that value becomes a single class-class
+// kerning entry; any pair that disagrees with its class stays (or falls
+// back to) an individual exception pair, exactly like a normal Apply.
+function buildGroupKerning(){
+  const out=outputPairs();
+
+  // 1. RSB of every left glyph, LSB of every right glyph (integer font
+  // units — matches the granularity sidebearings are actually designed at,
+  // and absorbs curve-flattening noise in the geometric measurement).
+  const rsbOf={}, lsbOf={};
+  for(const d of out){
+    if(!(d.left in rsbOf)){
+      const gc=glyphCache[d.left];
+      rsbOf[d.left]=gc?Math.round(geomSB(gc.rightFine??gc.rightGeom)):null;
+    }
+    if(!(d.right in lsbOf)){
+      const gc=glyphCache[d.right];
+      lsbOf[d.right]=gc?Math.round(geomSB(gc.leftFine??gc.leftGeom)):null;
+    }
+  }
+  const rsbClasses={}, lsbClasses={}; // sidebearing value -> [glyphNames]
+  for(const g in rsbOf){const v=rsbOf[g];if(v==null)continue;(rsbClasses[v]=rsbClasses[v]||[]).push(g);}
+  for(const g in lsbOf){const v=lsbOf[g];if(v==null)continue;(lsbClasses[v]=lsbClasses[v]||[]).push(g);}
+
+  // 2. Only classes with >=2 members are worth grouping — collect the
+  // actual pairs that fall inside a (right-class, left-class) combo.
+  const comboPairs={}; // "rsb|lsb" -> [pair,…]
+  for(const d of out){
+    const rv=rsbOf[d.left], lv=lsbOf[d.right];
+    if(rv==null||lv==null)continue;
+    if((rsbClasses[rv]||[]).length<2||(lsbClasses[lv]||[]).length<2)continue;
+    const key=rv+'|'+lv;
+    (comboPairs[key]=comboPairs[key]||[]).push(d);
+  }
+
+  // 3. Per combo: the majority correction value becomes the class-class
+  // entry; a combo needs >=2 pairs sharing that value to be worth it at
+  // all (otherwise it's a wash — leave every pair in it individual).
+  const usedRsb=new Set(), usedLsb=new Set();
+  const classPairs=[]; // {rv,lv,value}
+  const groupedKeys=new Set(); // 'left|right' already covered by a class entry
+  for(const key in comboPairs){
+    const pairsHere=comboPairs[key];
+    const counts=new Map();
+    for(const d of pairsHere)counts.set(d.correction,(counts.get(d.correction)||0)+1);
+    let bestVal=null,bestN=0;
+    for(const [v,n] of counts)if(n>bestN){bestN=n;bestVal=v;}
+    if(bestN<2)continue;
+    const [rv,lv]=key.split('|');
+    classPairs.push({rv,lv,value:bestVal});
+    usedRsb.add(rv);usedLsb.add(lv);
+    for(const d of pairsHere)if(d.correction===bestVal)groupedKeys.add(d.left+'|'+d.right);
+  }
+  const individual=out.filter(d=>!groupedKeys.has(d.left+'|'+d.right))
+    .map(d=>({left:d.left,right:d.right,correction:d.correction}));
+
+  // 4. Classes get a local id here only — kerning groups are shared across
+  // every master in the font, and other masters may already rely on
+  // existing group names, so the actual "G000N" names are assigned by
+  // Python (_apply_group_kerning), which can see the whole font and picks
+  // up counting after the highest number already in use instead of
+  // reusing (or deleting) anything.
+  const groups=[];
+  for(const rv of usedRsb)groups.push({side:'right',localId:'R'+rv,glyphs:rsbClasses[rv]});
+  for(const lv of usedLsb)groups.push({side:'left',localId:'L'+lv,glyphs:lsbClasses[lv]});
+  const classEntries=classPairs.map(cp=>({rightLocalId:'R'+cp.rv,leftLocalId:'L'+cp.lv,value:cp.value}));
+
+  return {groups,classEntries,pairs:individual};
+}
+
+// Send the compressed group-kerning result to Python for application to the font.
+function applyGroupKerningToGlyphs(){
+  if(isComputing){pendingAction=()=>applyGroupKerningToGlyphs();log('⏳ With Kerning Groups queued — waiting for computation to finish','info');return;}
+  if(!kerningData.length){alert('No kerning data — run Compute first.');return;}
+  if(!outputPairs().length){alert('All corrections are zero — nothing to apply.');return;}
+  const {groups,classEntries,pairs}=buildGroupKerning();
+  const payload={groups,classEntries,pairs,params:paramSummary(P())};
+  window.location.href='kerntrip://applygroupkerning?'+encodeURIComponent(JSON.stringify(payload));
+}
+
 function applySpacingToGlyphs(){
   if(!IS_GLYPHS){return;}
   if(!Object.keys(glyphCache).length){alert('No spacing data — run Compute first.');return;}
@@ -3023,6 +3117,7 @@ function updateLightModeButton(){
   const b=document.getElementById('btn-light-act');if(b)b.disabled=kerningData.length===0;
   const r=document.getElementById('btn-light-recompute');if(r)r.disabled=kerningData.length===0;
   const c=document.getElementById('btn-light-clip');if(c)c.disabled=kerningData.length===0;
+  const g=document.getElementById('btn-light-group');if(g)g.disabled=kerningData.length===0;
 }
 
 function afterCompute(){
@@ -3729,6 +3824,13 @@ if(IS_GLYPHS){
   // Show the same Apply-Kerning action on the Equilibrium tab (Glyphs mode only)
   const equiApplyBtn=document.getElementById('btn-apply-kerning-equi');
   if(equiApplyBtn)equiApplyBtn.style.display='';
+  // Show "With Kerning Groups" (class compression) next to every Apply-Kerning button (Glyphs mode only)
+  const groupBtn=document.getElementById('btn-group-kerning');
+  if(groupBtn)groupBtn.style.display='';
+  const groupEquiBtn=document.getElementById('btn-group-kerning-equi');
+  if(groupEquiBtn)groupEquiBtn.style.display='';
+  const groupLightBtn=document.getElementById('btn-light-group');
+  if(groupLightBtn)groupLightBtn.style.display='';
   // Hide testpage button (no font file available)
   const tpBtn=document.querySelector('.btn-hdr.testpage');
   if(tpBtn)tpBtn.style.display='none';

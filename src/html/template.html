@@ -14,7 +14,7 @@
 <header>
   <div class="header-title">
     <div class="logo-mark" ondblclick="toggleLightMode()" title="Double-click to switch panel mode" style="cursor:pointer;user-select:none">KernTrip</div>
-    <span style="font-size:9px;color:var(--text);margin-left:4px;opacity:.7" name="version">v0.5.2</span>
+    <span style="font-size:9px;color:var(--text);margin-left:4px;opacity:.7" name="version">v0.6.1</span>
   </div>
   <div class="header-sep"></div>
   <div class="header-font-info" id="header-font-info">No font loaded</div>
@@ -200,6 +200,7 @@
   <button id="btn-light-recompute" disabled onclick="guardedAction(runAnalysis)">↺ Recompute</button>
   <button id="btn-light-clip" disabled onclick="copyKerningToClipboard()">⎘ Kerning to Clipboard</button>
   <button id="btn-light-act" disabled onclick="exportCSV()">↓ Export CSV</button>
+  <button id="btn-light-group" disabled style="display:none" onclick="applyGroupKerningToGlyphs()" title="Compress the kerning table into classes: glyphs with identical sidebearings collapse into one kerning group, cutting the pair count. Adds new groups without touching existing ones (other masters may share them).">⊙ With Kerning Groups</button>
   <div class="log-resize" id="log-resize"></div>
   <div class="logbox" id="logbox"></div>
 </div>
@@ -277,6 +278,7 @@
       <button class="filter-mode" id="rx-btn" onclick="toggleRegex()" title="Toggle regex mode">.*</button>
       <button id="pair-preview-btn" class="tbtn" onclick="togglePairPreview()" title="Toggle pair preview mode (also: Esc)">⊙ Pair</button>
       <button class="btn-exp" onclick="exportCSV()">↓ Export</button>
+      <button class="btn-exp" id="btn-group-kerning" onclick="applyGroupKerningToGlyphs()" style="display:none" title="Compress the kerning table into classes: glyphs with identical sidebearings collapse into one kerning group, cutting the pair count. Adds new groups without touching existing ones (other masters may share them).">⊙ With Kerning Groups</button>
     </div>
     <div class="filter-group" id="spacing-filter-group" style="display:none">
       <button class="btn-exp" id="btn-apply-spacing" onclick="applySpacingToGlyphs()" style="display:none">⊙ Apply Spacing</button>
@@ -284,6 +286,7 @@
     <div class="filter-group" id="cadence-filter-group" style="display:none"></div>
     <div class="filter-group" id="equi-filter-group" style="display:none">
       <button class="btn-exp" id="btn-apply-kerning-equi" onclick="applyToGlyphs()" style="display:none">⊙ Apply Kerning to Glyphs</button>
+      <button class="btn-exp" id="btn-group-kerning-equi" onclick="applyGroupKerningToGlyphs()" style="display:none" title="Compress the kerning table into classes: glyphs with identical sidebearings collapse into one kerning group, cutting the pair count. Adds new groups without touching existing ones (other masters may share them).">⊙ With Kerning Groups</button>
     </div>
   </div>
   <div class="tbl-wrap" id="kern-panel">

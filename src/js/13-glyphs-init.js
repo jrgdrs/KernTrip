@@ -46,6 +46,13 @@ if(IS_GLYPHS){
   // Show the same Apply-Kerning action on the Equilibrium tab (Glyphs mode only)
   const equiApplyBtn=document.getElementById('btn-apply-kerning-equi');
   if(equiApplyBtn)equiApplyBtn.style.display='';
+  // Show "With Kerning Groups" (class compression) next to every Apply-Kerning button (Glyphs mode only)
+  const groupBtn=document.getElementById('btn-group-kerning');
+  if(groupBtn)groupBtn.style.display='';
+  const groupEquiBtn=document.getElementById('btn-group-kerning-equi');
+  if(groupEquiBtn)groupEquiBtn.style.display='';
+  const groupLightBtn=document.getElementById('btn-light-group');
+  if(groupLightBtn)groupLightBtn.style.display='';
   // Hide testpage button (no font file available)
   const tpBtn=document.querySelector('.btn-hdr.testpage');
   if(tpBtn)tpBtn.style.display='none';

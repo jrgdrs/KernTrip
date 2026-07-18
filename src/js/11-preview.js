@@ -21,6 +21,7 @@ function updateLightModeButton(){
   const b=document.getElementById('btn-light-act');if(b)b.disabled=kerningData.length===0;
   const r=document.getElementById('btn-light-recompute');if(r)r.disabled=kerningData.length===0;
   const c=document.getElementById('btn-light-clip');if(c)c.disabled=kerningData.length===0;
+  const g=document.getElementById('btn-light-group');if(g)g.disabled=kerningData.length===0;
 }
 
 function afterCompute(){
