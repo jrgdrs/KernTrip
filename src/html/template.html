@@ -14,7 +14,7 @@
 <header>
   <div class="header-title">
     <div class="logo-mark" ondblclick="toggleLightMode()" title="Double-click to switch panel mode" style="cursor:pointer;user-select:none">KernTrip</div>
-    <span style="font-size:9px;color:var(--text);margin-left:4px;opacity:.7" name="version">v0.5.0</span>
+    <span style="font-size:9px;color:var(--text);margin-left:4px;opacity:.7" name="version">v0.5.2</span>
   </div>
   <div class="header-sep"></div>
   <div class="header-font-info" id="header-font-info">No font loaded</div>
@@ -282,7 +282,9 @@
       <button class="btn-exp" id="btn-apply-spacing" onclick="applySpacingToGlyphs()" style="display:none">⊙ Apply Spacing</button>
     </div>
     <div class="filter-group" id="cadence-filter-group" style="display:none"></div>
-    <div class="filter-group" id="equi-filter-group" style="display:none"></div>
+    <div class="filter-group" id="equi-filter-group" style="display:none">
+      <button class="btn-exp" id="btn-apply-kerning-equi" onclick="applyToGlyphs()" style="display:none">⊙ Apply Kerning to Glyphs</button>
+    </div>
   </div>
   <div class="tbl-wrap" id="kern-panel">
     <div class="empty" id="empty-state">

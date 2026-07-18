@@ -44,7 +44,7 @@ try:
 except (ImportError, AttributeError):
     SCRIPT_MENU = 7
 
-from AppKit import NSApp, NSMenuItem, NSObject, NSMakeRect
+from AppKit import NSApp, NSMenuItem, NSObject, NSMakeRect, NSScreen
 
 try:
     from AppKit import (NSWindowStyleMaskTitled, NSWindowStyleMaskClosable,
@@ -433,8 +433,15 @@ class KernTripDialog(object):
             'window.__IS_GLYPHS = true;', 0, True)
         uc.addUserScript_(flag_script)
 
-        rect          = NSMakeRect(0, 0, 980, 720)   # full panel default (matches kerntrip://resize full mode)
-        self._webview = WKWebView.alloc().initWithFrame_configuration_(rect, config)
+        # Open as a centered overlay at 82% of the screen, not a corner-anchored
+        # panel — scales with display size instead of a fixed pixel default.
+        screen  = (NSScreen.mainScreen() or NSScreen.screens()[0]).visibleFrame()
+        win_w   = round(screen.size.width * 0.82)
+        win_h   = round(screen.size.height * 0.82)
+        win_x   = screen.origin.x + (screen.size.width - win_w) / 2.0
+        win_y   = screen.origin.y + (screen.size.height - win_h) / 2.0
+        rect    = NSMakeRect(win_x, win_y, win_w, win_h)
+        self._webview = WKWebView.alloc().initWithFrame_configuration_(NSMakeRect(0, 0, win_w, win_h), config)
 
         nav_delegate         = _KernTripNavDelegate.alloc().init()
         nav_delegate._dialog = self

@@ -129,6 +129,12 @@ document.addEventListener('keydown',e=>{
   } else if(e.key==='ArrowUp'&&pairPreviewMode){
     e.preventDefault();
     if(selectedPairIdx>0)selectPairRow(selectedPairIdx-1);
+  } else if(e.key==='ArrowDown'&&currentTab==='equi'&&selectedEquiIdx>=0){
+    e.preventDefault();
+    if(selectedEquiIdx<Math.min(equiData.length,150)-1)selectEquiRow(selectedEquiIdx+1);
+  } else if(e.key==='ArrowUp'&&currentTab==='equi'&&selectedEquiIdx>=0){
+    e.preventDefault();
+    if(selectedEquiIdx>0)selectEquiRow(selectedEquiIdx-1);
   } else if(e.key==='Escape'){
     pairPreviewMode=false;
     selectedPairIdx=-1;

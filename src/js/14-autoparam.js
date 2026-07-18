@@ -6,12 +6,15 @@
 // choices). Each parameter is iterated in 5 even steps across its range;
 // the candidate with the lowest max triple-equilibrium Δ wins (lite
 // computation on the test-string glyphs, triples from the corpus pairs —
-// same construction as 15-equilibrium). Coarse-to-fine rounds: each round
-// re-scans a range halved around the previous optimum, until max Δ < 10 fu
-// (at most 6 rounds). Runs automatically after every font load; afterwards
-// the result is documented in Font Info → Notes (Glyphs mode) — timestamp,
-// max-equilibrium, palette parameters — and the optician window (setup
-// assistant, 16-wizard) opens.
+// same construction as 15-equilibrium); median Δ is logged alongside it
+// for context but is not the selection criterion. Coarse-to-fine rounds:
+// each round re-scans a range halved around the previous optimum, running
+// the full _AP_ROUNDS_MAX rounds (or until all ranges converge) to find
+// the true minimum max Δ — the 10 fu target is reported once reached but
+// no longer stops the scan early. Runs automatically after every font
+// load; afterwards the result is documented in Font Info → Notes (Glyphs
+// mode) — timestamp, max- and median-equilibrium, palette parameters —
+// and the optician window (setup assistant, 16-wizard) opens.
 // Test text covers a broad mix of upper/lower, round/diagonal, straight shapes.
 const _AP_TEXT = 'Arrowroot Barley Chervil Dumpling Endive Flaxseed Garbanzo Hijiki Ishtu Jicama Kale Lychee Marjoram Nectarine Oxtail Pizza Quinoa Roquefort Squash Tofu Uppuma Vanilla Wheat Xergis Yogurt Zweiback';
 
@@ -65,7 +68,7 @@ function _apSetField(key, value) {
 // would be a validation limit, not a plausible design range (mingap up to
 // 100% of UPM, blur up to 50). Later rounds pass a narrowed [lo, hi].
 const _AP_RANGE = { smooth: [0, 99], blur: [1, 16], mingap: [0, 8] };
-const _AP_TARGET = 10;     // fu — stop as soon as max equilibrium Δ drops below
+const _AP_TARGET = 10;     // fu — informational threshold, reported but no longer stops the scan early
 const _AP_ROUNDS_MAX = 6;  // hard cap on refinement rounds
 
 function _apSteps(key, lo, hi) {
@@ -136,7 +139,8 @@ function _apBuildTriples(charMap) {
 
 // ── Lite equilibrium score for the current field values ───────────────────────
 // Margins for the test-string chars, corrections via the shared pair core
-// (03), then max Δ = |gapL − gapR| over the triples. Lower is better.
+// (03), then Δ = |gapL − gapR| over the triples. Returns {max, med, n} —
+// max is the selection criterion (lower is better), med is reported for context.
 async function _apEquiScore(charMap, tri) {
   await new Promise(r => setTimeout(r, 0)); // yield so log messages paint
 
@@ -179,7 +183,7 @@ async function _apEquiScore(charMap, tri) {
     if (r) corrOf[key] = r.corr;
   }
 
-  let maxErr = 0, n = 0;
+  const errs = [];
   for (const [a, b, c] of tri.triples) {
     const gA = localGC[a], gB = localGC[b], gC = localGC[c];
     if (!gA || !gB || !gC) continue;
@@ -187,11 +191,11 @@ async function _apEquiScore(charMap, tri) {
     if (!mL || !mR) continue;
     const gapL = mL.mean + (corrOf[a + '|' + b] || 0);
     const gapR = mR.mean + (corrOf[b + '|' + c] || 0);
-    const err  = Math.abs(gapL - gapR);
-    if (err > maxErr) maxErr = err;
-    n++;
+    errs.push(Math.abs(gapL - gapR));
   }
-  return n ? maxErr : Infinity;
+  if (!errs.length) return { max: Infinity, med: Infinity, n: 0 };
+  errs.sort((x, y) => x - y);
+  return { max: errs[errs.length - 1], med: errs[Math.floor(errs.length / 2)], n: errs.length };
 }
 
 // ── Scan one parameter: 5 steps, keep the lowest max equilibrium Δ ────────────
@@ -200,18 +204,18 @@ async function _apScan(label, paramKey, candidates, base, optimal, charMap, tri,
   if (btn) btn.textContent = `⚙ ${label} (${stepN}/${totalSteps})`;
   log(`AutoParam ${stepN}/${totalSteps}: scanning ${label} [${candidates.join(', ')}]`, 'info');
 
-  let bestIdx = 0, bestScore = Infinity;
+  let bestIdx = 0, bestScore = Infinity, bestMed = Infinity;
   for (let i = 0; i < candidates.length; i++) {
     _apRestoreFields(base);
     for (const [k, v] of Object.entries(optimal)) _apSetField(k, v);
     _apSetField(paramKey, candidates[i]);
-    const score = await _apEquiScore(charMap, tri);
-    log(`  ${label}=${candidates[i]} → max equilibrium Δ ${r1(score)} fu`, 'info');
-    if (score < bestScore) { bestScore = score; bestIdx = i; }
+    const stats = await _apEquiScore(charMap, tri);
+    log(`  ${label}=${candidates[i]} → median Δ ${r1(stats.med)} fu, max Δ ${r1(stats.max)} fu`, 'info');
+    if (stats.max < bestScore) { bestScore = stats.max; bestMed = stats.med; bestIdx = i; }
   }
 
-  log(`AutoParam ${stepN}/${totalSteps}: ${label} → ${candidates[bestIdx]} (max Δ ${r1(bestScore)} fu)`, 'ok');
-  return { best: candidates[bestIdx], score: bestScore };
+  log(`AutoParam ${stepN}/${totalSteps}: ${label} → ${candidates[bestIdx]} (median Δ ${r1(bestMed)} fu, max Δ ${r1(bestScore)} fu)`, 'ok');
+  return { best: candidates[bestIdx], score: bestScore, med: bestMed };
 }
 
 // ── Run documentation: Font Info → Notes block ────────────────────────────────
@@ -236,10 +240,12 @@ function apAfterAnalysis() {
     _apNotePending = false;
     const d = new Date(), pad = n => String(n).padStart(2, '0');
     const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    const maxE  = (typeof equiData !== 'undefined' && equiData.length) ? equiData[0].err : null;
+    const maxE = (typeof equiData !== 'undefined' && equiData.length) ? equiData[0].err : null;
+    const medE = (typeof equiStats !== 'undefined' && equiStats) ? equiStats.med : null;
     const lines = [
       `[KernTrip AutoParam] ${stamp}`,
       `max-equilibrium ${maxE != null ? maxE : 'n/a'}`,
+      `median-equilibrium ${medE != null ? medE : 'n/a'}`,
       _apPaletteLine(),
     ];
     for (const l of lines) log(l, 'ok');
@@ -293,19 +299,27 @@ async function autoParam() {
     // zones is fixed at 16, glow/glowblur stay off, lazy/round/bias are
     // style choices — only the measuring trio is scanned, coarse-to-fine:
     // round 1 covers the full _AP_RANGE, each later round halves the range
-    // around the previous optimum. Iterates until max Δ < _AP_TARGET fu,
-    // at most _AP_ROUNDS_MAX rounds; converged ranges are skipped.
+    // around the previous optimum. Always runs the full _AP_ROUNDS_MAX
+    // rounds (converged ranges are skipped, never used to stop early) —
+    // whether or not the target is reached after round 1 makes no
+    // difference. The scan order rotates by one position each round, so
+    // every parameter takes its turn going first: the parameter scanned
+    // first in a round only sees the *other* two params at their prior
+    // round's values, while later params in that round already see
+    // this round's fresher neighbor — rotating spreads that first-mover
+    // disadvantage evenly instead of always favoring the same parameter.
     const PARAMS  = [['Smooth', 'smooth'], ['Blur', 'blur'], ['MinGap', 'mingap']];
     const TOTAL   = PARAMS.length * _AP_ROUNDS_MAX;
     const optimal = { zones: 16 };
     const range   = {};
     for (const [, key] of PARAMS) range[key] = _AP_RANGE[key].slice();
 
-    let stepN = 0, score = Infinity;
-    scan:
+    let stepN = 0, score = Infinity, med = Infinity;
     for (let round = 1; round <= _AP_ROUNDS_MAX; round++) {
+      const offset = (round - 1) % PARAMS.length;
+      const order  = [...PARAMS.slice(offset), ...PARAMS.slice(0, offset)];
       let scanned = 0;
-      for (const [label, key] of PARAMS) {
+      for (const [label, key] of order) {
         stepN++;
         const cands = _apSteps(key, range[key][0], range[key][1]);
         if (cands.length < 2) { log(`AutoParam ${stepN}/${TOTAL}: ${label} range converged (${cands[0]})`, 'info'); continue; }
@@ -313,15 +327,16 @@ async function autoParam() {
         const r = await _apScan(`${label} R${round}`, key, cands, base, optimal, charMap, tri, stepN, TOTAL);
         optimal[key] = r.best;
         score = r.score;
+        med   = r.med;
         // refine: next round scans half the span, centered on the optimum
         const half = (range[key][1] - range[key][0]) / 4;
         const [blo, bhi] = _AP_RANGE[key];
         range[key] = [Math.max(blo, r.best - half), Math.min(bhi, r.best + half)];
-        if (score < _AP_TARGET) { log(`AutoParam: target reached — max Δ ${r1(score)} fu < ${_AP_TARGET} fu`, 'ok'); break scan; }
       }
       if (!scanned) { log('AutoParam: all ranges converged — stopping', 'info'); break; }
     }
-    if (score >= _AP_TARGET) log(`AutoParam: scan finished at max Δ ${r1(score)} fu (target ${_AP_TARGET} fu not reached)`, 'info');
+    log(`AutoParam: scan finished — median Δ ${r1(med)} fu, max Δ ${r1(score)} fu ` +
+        (score < _AP_TARGET ? `(target ${_AP_TARGET} fu reached)` : `(target ${_AP_TARGET} fu not reached)`), 'ok');
 
     // Apply all optimal values, then trigger the full analysis to refresh the UI
     if (btn) btn.textContent = '⚙ Applying…';

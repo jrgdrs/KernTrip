@@ -4,7 +4,7 @@
 // ── Runtime detection ─────────────────────────────────────────────────────────
 // IS_GLYPHS is true when running inside Glyphs.app via WKWebView.
 // In that case the drop zone is replaced by a "Connected" indicator,
-// and the "Export CSV" button becomes "Apply to Font".
+// and the "Export CSV" button becomes "Apply Kerning to Glyphs".
 // Injected by WKUserScript before page scripts run (see plugin.py _build_ui).
 const IS_GLYPHS = !!(window.__IS_GLYPHS);
 
@@ -25,6 +25,7 @@ let lastFontKey=''; // tracks font+master to detect real font changes vs recompu
 let useRegex=false;
 let selectedPairIdx=-1;  // index into filteredData for pair-click preview
 let pairPreviewMode=false;  // true when showing a clicked pair in preview
+let selectedEquiIdx=-1;  // index into the rendered equilibrium rows for arrow-key nav
 let baseValueLC=0,baseValueUC=0;
 let currentUPM=1000,yBotGlobal=0,yTopGlobal=0,xHeightGlobal=0;
 // space/nbspace have no outline (skipped from glyphCache) — their glyph

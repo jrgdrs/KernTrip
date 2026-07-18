@@ -35,23 +35,23 @@ if(IS_GLYPHS){
   }
   // Rename Export button to Apply
   const expBtn=document.querySelector('.btn-exp');
-  if(expBtn){expBtn.textContent='⊙ Apply to Font';expBtn.onclick=applyToGlyphs;}
+  if(expBtn){expBtn.textContent='⊙ Apply Kerning to Glyphs';expBtn.onclick=applyToGlyphs;}
   const lightActBtn=document.getElementById('btn-light-act');
-  if(lightActBtn){lightActBtn.textContent='⊙ Apply to Font';lightActBtn.onclick=applyToGlyphs;}
+  if(lightActBtn){lightActBtn.textContent='⊙ Apply Kerning to Glyphs';lightActBtn.onclick=applyToGlyphs;}
   const clipBtn=document.getElementById('btn-light-clip');
   if(clipBtn)clipBtn.style.display='none';
   // Show Apply Spacing button (Glyphs mode only)
   const asBtn=document.getElementById('btn-apply-spacing');
   if(asBtn)asBtn.style.display='';
+  // Show the same Apply-Kerning action on the Equilibrium tab (Glyphs mode only)
+  const equiApplyBtn=document.getElementById('btn-apply-kerning-equi');
+  if(equiApplyBtn)equiApplyBtn.style.display='';
   // Hide testpage button (no font file available)
   const tpBtn=document.querySelector('.btn-hdr.testpage');
   if(tpBtn)tpBtn.style.display='none';
   // Hide file input
   const fi=document.getElementById('fi');
   if(fi)fi.style.display='none';
-  // Taller logbox so debug stream is readable
-  const lb=document.querySelector('.logbox');
-  if(lb)lb.style.maxHeight='120px';
   dbg('Glyphs mode active — click Load & Compute to start');
   // Navigate to kerntrip://identify so Python sends font/master name immediately.
   window.location.href = 'kerntrip://identify';

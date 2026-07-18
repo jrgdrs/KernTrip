@@ -68,12 +68,15 @@ function renderEquilibrium(){
   const tb=document.getElementById('equi-tbody');
   if(!tb)return;
   tb.innerHTML='';
-  for(const d of equiData.slice(0,150)){
+  const shown=equiData.slice(0,150);
+  for(let i=0;i<shown.length;i++){
+    const d=shown[i];
     const tr=document.createElement('tr');
     const pct=Math.round(d.err/upm*1000)/10;
+    if(i===selectedEquiIdx)tr.className='selected';
     tr.style.cursor='pointer';
     tr.innerHTML=`<td class="cc">${esc(d.t)}</td><td>${d.gapL}</td><td>${d.gapR}</td><td style="font-weight:700">${d.err}</td><td style="color:var(--text3)">${pct}%</td>`;
-    tr.addEventListener('click',()=>equiPreview(d.t));
+    tr.addEventListener('click',()=>selectEquiRow(i));
     tb.appendChild(tr);
   }
 }
@@ -88,4 +91,15 @@ function equiPreview(t){
   renderPreview();
 }
 
-if(typeof module!=='undefined')module.exports={computeEquilibrium,renderEquilibrium,equiPreview};
+// Row click / arrow-key navigation (mirrors selectPairRow on the Coupling tab)
+function selectEquiRow(idx){
+  const n=Math.min(equiData.length,150);
+  if(idx<0||idx>=n)return;
+  selectedEquiIdx=idx;
+  renderEquilibrium();
+  equiPreview(equiData[idx].t);
+  const sel=document.querySelector('#equi-tbody tr.selected');
+  if(sel)sel.scrollIntoView({block:'nearest'});
+}
+
+if(typeof module!=='undefined')module.exports={computeEquilibrium,renderEquilibrium,equiPreview,selectEquiRow};
