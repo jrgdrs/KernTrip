@@ -76,6 +76,13 @@
     </div>
 
     <div class="pr" data-light="show">
+      <div class="pl" data-tip="Inset fu (stem vs. round, part two)&#10;&#10;How much of the round-vs-stem relation lives in the SIDEBEARINGS instead of kern pairs: stem sides get the spacing target minus this value (the base o/O anchors, rounds stay).&#10;&#10;Apply Spacing then carries the tuck — the systematic round+stem kerns (o·n, o·H …) collapse to 0, and stem+stem gaps close by 2× the value (kerning follows).&#10;&#10;0 = off, the relation stays as kern pairs.&#10;The setup assistant measures this font's full tuck and offers 0 · ½ · full.&#10;Default: 0">
+        Inset fu <span style="color:var(--text3);font-style:italic;font-size:9px">(tuck into spacing)</span><span>--inset · stem sides − N fu</span>
+      </div>
+      <input type="number" id="p-inset" value="0" min="0" step="1">
+    </div>
+
+    <div class="pr" data-light="show">
       <div class="pl" data-tip="Rhythm (cadence grid)&#10;&#10;Stem+stem pairs snap their stem gap (edge to edge) to the nearest multiple of the cadence tick — the POSITION snaps, not just the kerning value.&#10;&#10;This creates a regular sequence of stems (rhythm) across letter borders. Snapped pairs are marked ♩ in the table; the min gap always wins.&#10;Default: on">
         Rhythm <span style="color:var(--text3);font-style:italic;font-size:9px">(cadence snap)</span><span>--rhythm · stem gaps snap to grid</span>
       </div>

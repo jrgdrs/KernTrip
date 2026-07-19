@@ -72,7 +72,9 @@ The whole pair formula lives ONCE in `pairCorrCore` + `buildPairCtx` +
 4. **Rhythm grid** (`p-rhythm`, default on): stem+stem pairs snap their stem
    gap (edge to edge) to the cadence tick — the position snaps, not the value.
    Marked with a musical note in the table, `[rhythm]` in the CSV; exempt from
-   dropping; the min gap always wins (capped pairs may leave the grid).
+   cost-based dropping, but a snap smaller than one module (Round) is dropped
+   as noise — sub-module pair values never reach the output; the min gap
+   always wins (capped pairs may leave the grid).
    **Stem detection** (`stemEdge`): the largest value cluster of the margin
    profile with a TIGHT tolerance (0.4% of UPM) over >=50% of the ink zones
    (and >=3) — serifs/brackets fall out as outliers; bowls and display stems
@@ -80,6 +82,17 @@ The whole pair formula lives ONCE in `pairCorrCore` + `buildPairCtx` +
 5. **Stem gap** (`p-stemgap`, default 100%): target gap for stem pairs
    relative to the round reference (the HHOOHH experiment) — shifts base AND
    proximity target by `base·(f−1)`; full on stem+stem, half on stem+round.
+   **Inset** (`p-inset`, fu, default 0 — stem vs. round, part two): moves the
+   round-vs-stem tuck from kern pairs into the sidebearings. Spacing (09)
+   gives every side whose stem-ness (stemEdge) differs from the base's
+   corresponding side the class target − inset; the base never moves, so
+   apply+recompute cannot drift. The kern core (03) shifts base+prox by
+   −2·inset ONLY for pairs where BOTH facing sides move (kerning follows the
+   spacing); one-sided (round+stem) pairs get no credit — their physical
+   −inset IS the baked tuck, so after Apply Spacing the systematic
+   round-vs-stem kerns (o·n −1 module etc.) collapse to 0. Stem+stem gaps
+   close by 2·inset as part of the design choice. The wizard measures the
+   full tuck (dMin(base+stem) − dMin(base+base)) and offers 0 · ½ · full.
 6. **Triple equilibrium** (`15-equilibrium.js`, own tab): triples from the
    most frequent corpus pairs ((A,B)+(B,C)); delta = |optical white space
    left − right| around the middle glyph (kerning included). Median/P95 as a
@@ -111,8 +124,8 @@ break the stem detection.
 **Setup assistant** (`16-wizard.js`, "Setup" button; opens automatically
 after load → AutoParam (`apAfterAnalysis` in 14 calls `wizOpen`), can be
 turned off via localStorage `kerntripWizAuto`):
-measured values are collected automatically; the five design values
-(width · stem gap+rhythm · bias · lazy · min gap) are set step by step on
+measured values are collected automatically; the six design values
+(width · stem gap+rhythm · inset · bias · lazy · min gap) are set step by step on
 type samples — 3 clickable variants per step (optician principle) plus a
 fine slider; the live simulation computes only the ~20 pairs of the sample
 via `pairCorrCore` (margins come from the `glyphCache` of the first
@@ -120,8 +133,8 @@ analysis). "Automatic" sets values via serif classification. Finish -> full
 computation -> Equilibrium tab (`wizFinishPending` flag, hook
 `wizMaybeAutoOpen()` at the end of 05/06).
 
-Parameter panel: design values (Width · Stem gap · Rhythm · Lazy · Bias ·
-Min gap · Round · Pair limit) in front; measuring values + Tracking
+Parameter panel: design values (Width · Stem gap · Inset · Rhythm · Lazy ·
+Bias · Min gap · Round · Pair limit) in front; measuring values + Tracking
 (expert field) under "Extended". There is no help page.
 
 ---

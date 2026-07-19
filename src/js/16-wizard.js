@@ -3,7 +3,7 @@
 // ══════════════════════════════════════════════════════
 // "Global to local" as a UI: the MEASURED values (zones/smooth/blur/cadence/
 // slant) are collected automatically; the DESIGN values (width, stem gap,
-// bias, lazy, min gap) only act inside the pair loop — so every step can
+// inset, bias, lazy, min gap) only act inside the pair loop — so every step can
 // simulate its type sample in real time (pairCorrCore on ~20 pairs) until
 // all values are set. Only the final step runs the full computation.
 // Optician principle: 3 clickable variants per step, plus a fine slider.
@@ -17,6 +17,10 @@ const WIZ_STEPS=[
    toggle:{param:'rhythm',label:'Rhythm — stem gaps snap to the cadence grid (lines)'},
    text:'HHOOHHOO nnoonnoo',
    hint:'The HHOOHH experiment: do the gaps between stems look as big as the gaps between round shapes? The stem distance is a pure style choice — smaller = stems closer than rounds.'},
+  // variants/max are re-measured per font in wizOpen (wizInsetFull)
+  {key:'inset',title:'Inset',param:'inset',min:0,max:60,step:1,variants:[0,15,30],unit:' fu',grid:true,
+   text:'noon HOOH nnoo',
+   hint:'Stem vs. round, part two: how far do the stem sides tuck in toward the rounds? 0 keeps the tuck as kern pairs (o·n −1 module etc.); the measured variants (½ and full tuck) bake it into the sidebearings instead — Apply Spacing then carries it, the systematic round-vs-stem kerns disappear, and stem gaps close by twice the value.'},
   {key:'bias',title:'Bias',param:'bias',min:-100,max:100,step:10,variants:[-50,0,50],unit:'',
    text:'rn rm cl vv modern minimum',
    hint:'Legible (−): rn must not look like m, shapes stay clearly apart. Readable (+): the line should flow with a calm rhythm. Choose what matters more for this font.'},
@@ -43,10 +47,38 @@ function wizMaybeAutoOpen(){
   if(wizFinishPending){wizFinishPending=false;wizClose();switchTab('equi');return;}
 }
 
+// Measured full tuck (fu) for the Inset step: the contact shortfall of the
+// class base against a flat stem — dMin(base+stemRef) − dMin(base+base),
+// i.e. how much closer the bulge tip must come to match the self-pair.
+// LC and UC are measured separately; the larger one drives the variants.
+function wizInsetFull(){
+  const p=P();
+  let best=0;
+  for(const[baseKey,refs]of[[p.baselc,['n','i','l','h','m','u']],[p.baseuc,['H','I','N','M','U','L']]]){
+    const b=glyphCache[wizL2K[baseKey]];
+    if(!b)continue;
+    for(const rl of refs){
+      const g=glyphCache[wizL2K[rl]];
+      if(!g||stemEdge(g.leftGeom,currentUPM)===null)continue;
+      const self=minPairDist(b.rightGeom,b.leftGeom),mix=minPairDist(b.rightGeom,g.leftGeom);
+      if(self!==null&&mix!==null)best=Math.max(best,mix-self);
+      break; // first usable stem reference per class decides
+    }
+  }
+  return Math.max(0,Math.round(best));
+}
+
 function wizOpen(){
   if(!glyphCache||!Object.keys(glyphCache).length){alert('Load a font first (compute runs automatically).');return;}
   wizL2K={};
   for(const k of Object.keys(glyphCache))wizL2K[glyphCache[k].charLabel]=k;
+  // Inset step: variants 0 · ½ · full of THIS font's measured tuck
+  const insStep=WIZ_STEPS.find(x=>x.key==='inset');
+  if(insStep){
+    const d=wizInsetFull()||(parseInt(document.getElementById('p-round')?.value)||20);
+    insStep.variants=[0,Math.round(d/2),d];
+    insStep.max=Math.max(20,Math.ceil(d*1.5));
+  }
   // start values from the current fields
   wizVals={};wizSel={};
   for(const s of WIZ_STEPS){
@@ -163,7 +195,7 @@ function wizAutoValues(){
     const se=stemEdge(l.leftGeom,currentUPM);
     if(se!==null){let mn=Infinity;for(const v of l.leftGeom)if(v!==null&&v<mn)mn=v;serif=(se-mn)>0.01*currentUPM;}
   }
-  return{vals:{width:100,stemgap:100,bias:0,lazy:serif?40:50,mingap:serif?1.5:1},rhythm:true,serif};
+  return{vals:{width:100,stemgap:100,inset:0,bias:0,lazy:serif?40:50,mingap:serif?1.5:1},rhythm:true,serif};
 }
 function wizAuto(){
   const a=wizAutoValues();

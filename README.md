@@ -24,6 +24,9 @@ https://jrgdrs.github.io/KernTrip/
 
 Download from https://jrgdrs.github.io/KernTrip/KernTrip.zip , unzip and doubleclick onto the Plugin to install it into Glyphs 3 (not version 2 but version 4 preview works also ;-). You find the call KernTrip in the Scrpts menu.
 
+For the recommended workflow and what each parameter does, see the
+**[How-To for Glyphs](HOWTO-Glyphs.md)**.
+
 ## Build by yourself
 
 If you want to build it by yourself, try

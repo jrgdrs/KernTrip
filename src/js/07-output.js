@@ -9,7 +9,7 @@ function outputPairs(){
 // Lists every menu parameter; smooth is reported as the menu value (P() stores it inverted).
 function paramSummary(p){
   const smoothMenu=p.smooth===0?0:Math.round((1-p.smooth)*100);
-  return `zones=${p.zones} smooth=${smoothMenu}% blur=${p.blur} round=${p.round} mingap=${Math.round(p.mingap*100)}% bias=${p.bias} lazy=${p.lazy} width=${p.width}% stemgap=${p.stemgap}% rhythm=${p.rhythm?'on':'off'} tracking=${p.tracking} glow=${p.glow?'on':'off'} glowblur=${p.glowblur} slant=${p.slant} pairlimit=${p.pairlimit} base=${p.baselc}/${p.baseuc}`;
+  return `zones=${p.zones} smooth=${smoothMenu}% blur=${p.blur} round=${p.round} mingap=${Math.round(p.mingap*100)}% bias=${p.bias} lazy=${p.lazy} width=${p.width}% stemgap=${p.stemgap}% inset=${p.inset} rhythm=${p.rhythm?'on':'off'} tracking=${p.tracking} glow=${p.glow?'on':'off'} glowblur=${p.glowblur} slant=${p.slant} pairlimit=${p.pairlimit} base=${p.baselc}/${p.baseuc}`;
 }
 
 // Send non-zero pairs to Python for application to the font.

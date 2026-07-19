@@ -341,6 +341,13 @@ body.light-mode #btn-light-act,body.light-mode #btn-light-group{display:block;}
     </div>
 
     <div class="pr" data-light="show">
+      <div class="pl" data-tip="Inset fu (stem vs. round, part two)&#10;&#10;How much of the round-vs-stem relation lives in the SIDEBEARINGS instead of kern pairs: stem sides get the spacing target minus this value (the base o/O anchors, rounds stay).&#10;&#10;Apply Spacing then carries the tuck — the systematic round+stem kerns (o·n, o·H …) collapse to 0, and stem+stem gaps close by 2× the value (kerning follows).&#10;&#10;0 = off, the relation stays as kern pairs.&#10;The setup assistant measures this font's full tuck and offers 0 · ½ · full.&#10;Default: 0">
+        Inset fu <span style="color:var(--text3);font-style:italic;font-size:9px">(tuck into spacing)</span><span>--inset · stem sides − N fu</span>
+      </div>
+      <input type="number" id="p-inset" value="0" min="0" step="1">
+    </div>
+
+    <div class="pr" data-light="show">
       <div class="pl" data-tip="Rhythm (cadence grid)&#10;&#10;Stem+stem pairs snap their stem gap (edge to edge) to the nearest multiple of the cadence tick — the POSITION snaps, not just the kerning value.&#10;&#10;This creates a regular sequence of stems (rhythm) across letter borders. Snapped pairs are marked ♩ in the table; the min gap always wins.&#10;Default: on">
         Rhythm <span style="color:var(--text3);font-style:italic;font-size:9px">(cadence snap)</span><span>--rhythm · stem gaps snap to grid</span>
       </div>
@@ -715,7 +722,7 @@ let unicodeToGlyphName={};   // codepoint → glyph name (Glyphs mode)
 // Legible (-): contact model stronger, min gap up to +50%, small tightenings
 // are dropped more freely. Readable (+): air model stronger, small loosenings
 // are dropped more freely. Base drop tolerance: 0.3% of UPM.
-const DEFAULTS={zones:16,smooth:50,round:20,blur:1,mingap:1,bias:0,lazy:50,width:100,stemgap:100,rhythm:true,baselc:'o',baseuc:'O',tracking:0,pairlimit:6400,glowblur:0,glow:false,slant:0};
+const DEFAULTS={zones:16,smooth:50,round:20,blur:1,mingap:1,bias:0,lazy:50,width:100,stemgap:100,inset:0,rhythm:true,baselc:'o',baseuc:'O',tracking:0,pairlimit:6400,glowblur:0,glow:false,slant:0};
 
 function P(){
   const mg=parseFloat(document.getElementById('p-mingap').value);
@@ -729,6 +736,7 @@ function P(){
     lazy:      Math.max(0,Math.min(99,parseFloat(document.getElementById('p-lazy').value)||0)),
     width:     (()=>{const w=parseFloat(document.getElementById('p-width')?.value);return isNaN(w)?DEFAULTS.width:Math.max(25,Math.min(300,w));})(),
     stemgap:   (()=>{const s=parseFloat(document.getElementById('p-stemgap')?.value);return isNaN(s)?DEFAULTS.stemgap:Math.max(25,Math.min(300,s));})(),
+    inset:     Math.max(0,parseFloat(document.getElementById('p-inset')?.value)||0),
     rhythm:    document.getElementById('p-rhythm')?.checked??DEFAULTS.rhythm,
     baselc:    (document.getElementById('p-baselc').value||DEFAULTS.baselc).trim(),
     baseuc:    (document.getElementById('p-baseuc').value||DEFAULTS.baseuc).trim(),
@@ -740,7 +748,7 @@ function P(){
   };
 }
 function resetParams(){
-  ['zones','smooth','round','blur','mingap','bias','lazy','width','stemgap','tracking','pairlimit','glowblur','slant'].forEach(k=>{
+  ['zones','smooth','round','blur','mingap','bias','lazy','width','stemgap','inset','tracking','pairlimit','glowblur','slant'].forEach(k=>{
     document.getElementById('p-'+k).value=DEFAULTS[k];
   });
   document.getElementById('p-baselc').value=DEFAULTS.baselc;
@@ -1319,7 +1327,12 @@ function buildPairCtx(p,store,upm,yBot,yTop,rhythmGrid){
   const proxUC=(ucC&&pdUC!==null)?pdUC+(baseUC-ucC.mean):null;
   const minGapFU=upm*p.mingap*wf;
   const minGapEff=minGapFU*(1+Math.max(0,-(p.bias||0))/200);
+  // stem-ness of the base glyphs' sides — the inset (stem vs. round) moves
+  // exactly the sides whose stem-ness DIFFERS from the base's, so the base
+  // stays the fixed anchor and repeated runs cannot drift
+  const bStem=g=>g?{r:stemEdge(g.rightGeom,upm)!==null,l:stemEdge(g.leftGeom,upm)!==null}:{r:false,l:false};
   return{upm,baseLC,baseUC,proxLC,proxUC,minGapFU,minGapEff,
+    baseStem:{lc:bStem(nD),uc:bStem(oD)},
     rhythmGrid:rhythmGrid||0,fineRowH:(yTop-yBot)/KT_FINE_N};
 }
 // The complete pair formula: shape classes -> bias beta -> stem gap ->
@@ -1347,6 +1360,23 @@ function pairCorrCore(gcA,gcB,p,ctx){
     const dS=base*(f-1);
     baseEff=base+dS;if(prox!==null)prox+=dS;
   }
+  // Inset (stem vs. round, part two): the spacing side (09) pulls every
+  // side whose stem-ness differs from the base's in by p.inset. The AIR
+  // target follows every shifted side (that white is missing by design, so
+  // the air model must not reopen it). The CONTACT target follows only when
+  // BOTH facing sides moved (stem+stem: a rhythm decision, not a tuck);
+  // one-sided (round+stem) pairs keep their contact target — their physical
+  // −inset eats the tuck desire, so once Apply Spacing has run, the
+  // systematic round-vs-stem kerns (o·n, o·H …) collapse to 0.
+  if((p.inset||0)>0){
+    const shA=(sA!==null)!==(gcA.cls==='UC'?ctx.baseStem.uc:ctx.baseStem.lc).r;
+    const shB=(sB!==null)!==(gcB.cls==='UC'?ctx.baseStem.uc:ctx.baseStem.lc).l;
+    const nSh=(shA?1:0)+(shB?1:0);
+    if(nSh>0){
+      baseEff-=p.inset*nSh;
+      if(prox!==null&&nSh===2)prox-=2*p.inset;
+    }
+  }
   // air/contact blend + lazy + opening brake
   let raw=baseEff-calc.mean;
   if(shape&&prox!==null&&beta>0)raw=(1-beta)*raw+beta*(prox-shape.dMin);
@@ -1354,11 +1384,15 @@ function pairCorrCore(gcA,gcB,p,ctx){
   raw*=1-0.4*(shape?shape.openness:0);
   let corr=rtm(raw,p.round);
   // rhythm grid: snap stem+stem gaps to the cadence grid
-  let rhythmic=false;
+  let rhythmic=false,thresholded=false;
   if(ctx.rhythmGrid>1&&nStem===2){
     const gap=sA+sB;
     const target=Math.max(ctx.rhythmGrid,Math.round((gap+corr)/ctx.rhythmGrid)*ctx.rhythmGrid);
     corr=Math.round(target-gap);rhythmic=true;
+    // A snap smaller than one module is noise, not rhythm: the gap already
+    // sits within half a module of its tick — that residue is spacing's
+    // territory, so sub-module pair values never reach the output.
+    if(Math.abs(corr)<p.round){corr=0;rhythmic=false;thresholded=true;}
   }
   // 2D min gap
   let capped=false;
@@ -1370,7 +1404,6 @@ function pairCorrCore(gcA,gcB,p,ctx){
     }
   }
   // cost-based dropping (replaces the old threshold)
-  let thresholded=false;
   if(!capped&&!rhythmic&&corr!==0){
     const tBase=ctx.upm*0.003,widen=1+Math.abs(bias)/33;
     const tPos=bias>0?tBase*widen:tBase;
@@ -2127,7 +2160,7 @@ function outputPairs(){
 // Lists every menu parameter; smooth is reported as the menu value (P() stores it inverted).
 function paramSummary(p){
   const smoothMenu=p.smooth===0?0:Math.round((1-p.smooth)*100);
-  return `zones=${p.zones} smooth=${smoothMenu}% blur=${p.blur} round=${p.round} mingap=${Math.round(p.mingap*100)}% bias=${p.bias} lazy=${p.lazy} width=${p.width}% stemgap=${p.stemgap}% rhythm=${p.rhythm?'on':'off'} tracking=${p.tracking} glow=${p.glow?'on':'off'} glowblur=${p.glowblur} slant=${p.slant} pairlimit=${p.pairlimit} base=${p.baselc}/${p.baseuc}`;
+  return `zones=${p.zones} smooth=${smoothMenu}% blur=${p.blur} round=${p.round} mingap=${Math.round(p.mingap*100)}% bias=${p.bias} lazy=${p.lazy} width=${p.width}% stemgap=${p.stemgap}% inset=${p.inset} rhythm=${p.rhythm?'on':'off'} tracking=${p.tracking} glow=${p.glow?'on':'off'} glowblur=${p.glowblur} slant=${p.slant} pairlimit=${p.pairlimit} base=${p.baselc}/${p.baseuc}`;
 }
 
 // Send non-zero pairs to Python for application to the font.
@@ -2449,15 +2482,29 @@ document.addEventListener('keydown',e=>{
 // ── SPACING CORRECTIONS ────────────────────────────────
 /**
  * Target margins per class come from the base glyphs (o/O). Five rules:
- *   1. The base glyph itself is centered: LSB = RSB (exact, no module
- *      rounding — snapping its own AW to the grid was tried and reverted,
- *      it visibly pulled the base off-center, which defeats the point of
- *      "everything else is based on the base"). "LSB/RSB" here means the
- *      ink extent at half the x-height (halfXhSB), not the true geometric
- *      minimum — that avoids letting serifs (near baseline/cap-height) or
- *      hooks/overshoots skew what should be a stem-width reading.
- *   2. Its centering offset shifts the class targets, so every other
- *      glyph inherits the same offset and keeps fitting the base.
+ *   1. The base glyph goes FIRST, before anything derives from it: its
+ *      advance width snaps to the module grid (nearest module, tracking
+ *      folded in) and the glyph is centered INSIDE that width — the white
+ *      is split so the half-x-height bearings equalize, an odd unit lands
+ *      right. (An earlier attempt snapped the base AW without re-splitting
+ *      the bearings; that pulled the base visibly off-center and was
+ *      reverted — the centered split is what makes the snap safe.)
+ *      "LSB/RSB" here means the ink extent at half the x-height
+ *      (halfXhSB), not the true geometric minimum — that avoids letting
+ *      serifs (near baseline/cap-height) or hooks/overshoots skew what
+ *      should be a stem-width reading.
+ *   2. The class targets are read off the ADJUSTED base (its margins plus
+ *      its dL/dR), so every other glyph inherits the module snap and the
+ *      centering and keeps fitting the base. The L/R corrections are exact
+ *      whole units — ONLY the advance width sits on the module grid
+ *      (Round). Running dL/dR through the module too was the original
+ *      design; it swallowed every correction below half a module, so the
+ *      other glyphs never actually picked up the base's margins/offsets.
+ *      dR is always derived as newAW − oldAW − dL, so the pair stays
+ *      integer-consistent and any rest lands on the right. Inset (stem vs.
+ *      round): sides whose stem-ness differs from the base's get the target
+ *      minus p.inset — Tracy's tuck baked into the bearings; the kern core
+ *      (03) is credited accordingly.
  *   3. Sidebearings never go negative: the negative side is pinned at 0
  *      and the advance width rounds UP to the next module width (< 1
  *      module unit added in total); the remaining slack is distributed
@@ -2481,10 +2528,11 @@ document.addEventListener('keydown',e=>{
  * computeSpacingRows() is the single source — table (renderSpacingTable)
  * and Apply Spacing (07) both consume its rows.
  */
-// Two-decimal rounding for the New L / New R columns — finer than the
-// general-purpose r1 (1 decimal) used elsewhere, since this table is where
-// the sub-unit sidebearing precision actually matters to the reader.
-function r2(v){return Math.round(v*100)/100;}
+// New L / New R are read as sidebearings, and sidebearings are whole font
+// units: L is floored and the cut-off rest folded into the right side (a
+// remainder always goes right), so L+R equals the rounded total white.
+// The sub-unit truth lives in the optical averages, not in these columns.
+function intLR(l,r){const L=Math.floor(l);return{L,R:Math.round(l+r)-L};}
 function avgMargin(arr){
   let sum=0,cnt=0;
   for(const v of arr)if(v!==null){sum+=v;cnt++;}
@@ -2555,18 +2603,33 @@ function computeSpacingRows(){
   const baseLcGC=glyphCache[p.baselc],baseUcGC=glyphCache[p.baseuc];
   const lcBotZ=baseLcGC?botZoneOf(baseLcGC):null, lcTopZ=baseLcGC?topZoneOf(baseLcGC):null;
   const ucBotZ=baseUcGC?botZoneOf(baseUcGC):null, ucTopZ=baseUcGC?topZoneOf(baseUcGC):null;
-  // centering offset per base glyph: shift that equalizes its half-x-height
-  // ink extent — folded into the class targets so all glyphs inherit it
-  const sbOff=gc=>{
-    if(!gc)return 0;
+  // Base pre-pass (rule 1): AW onto the module grid (tracking folded in),
+  // then centered inside that width — dL equalizes the half-x-height
+  // bearings, dR is the integer rest, so an exact tie leaves the odd unit
+  // on the right (half-down rounding). The class targets below are read
+  // off the ADJUSTED base, so every glyph inherits snap + centering.
+  const baseAdj=gc=>{
+    if(!gc)return null;
     const s=halfXhSB(gc);
-    return s.l===null||s.r===null?0:(s.r-s.l)/2;
+    const off=s.l===null||s.r===null?0:s.r-s.l;
+    const newAW=rtm(gc.advanceWidth+2*trk,p.round);
+    const dAW=newAW-gc.advanceWidth;
+    const dL=Math.ceil((off+dAW)/2-0.5);
+    return{newAW,dAW,dL,dR:dAW-dL};
   };
-  const sLc=sbOff(baseLcGC),sUc=sbOff(baseUcGC);
-  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+trk+sLc:null;
-  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+trk-sLc:null;
-  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+trk+sUc:null;
-  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+trk-sUc:null;
+  const adjLc=baseAdj(baseLcGC),adjUc=baseAdj(baseUcGC);
+  // Inset (stem vs. round): sides whose stem-ness differs from the base's
+  // corresponding side get the class target minus p.inset — the base is the
+  // fixed anchor (it never moves), so repeated apply+recompute cannot drift.
+  // The kerning core (03) credits pairs where both facing sides move; mixed
+  // pairs keep the physical −inset as the baked round-vs-stem tuck.
+  const sideStem=(gc,left)=>stemEdge(left?gc.leftGeom:gc.rightGeom,currentUPM)!==null;
+  const bsL={lc:baseLcGC?sideStem(baseLcGC,true):false,uc:baseUcGC?sideStem(baseUcGC,true):false};
+  const bsR={lc:baseLcGC?sideStem(baseLcGC,false):false,uc:baseUcGC?sideStem(baseUcGC,false):false};
+  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+adjLc.dL:null;
+  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+adjLc.dR:null;
+  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+adjUc.dL:null;
+  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+adjUc.dR:null;
 
   const rows=[];
   for(const gk of gks){
@@ -2582,17 +2645,22 @@ function computeSpacingRows(){
     const oldAW=gc.advanceWidth;
     let dL,dR,newAW;
     if(isBase){
-      // exact centering: LSB = RSB afterwards, module rounding would break it
-      const s=isUC?sUc:sLc;
-      dL=Math.round(trk+s);dR=Math.round(trk-s);
-      newAW=oldAW+dL+dR;
+      // rule 1, decided in the pre-pass above: module-snapped AW, centered
+      // split. o and O take the identical path.
+      const adj=isUC?adjUc:adjLc;
+      newAW=adj.newAW;dL=adj.dL;dR=adj.dR;
     }else{
-      dL=rtm(bL-gL,p.round);
-      dR=rtm(bR-gR,p.round);
-      newAW=rtm(oldAW+dL+dR,p.round);
+      const cKey=isUC?'uc':'lc';
+      const insL=(p.inset||0)>0&&sideStem(gc,true)!==bsL[cKey]?p.inset:0;
+      const insR=(p.inset||0)>0&&sideStem(gc,false)!==bsR[cKey]?p.inset:0;
+      const eL=bL-insL-gL,eR=bR-insR-gR; // exact fractional corrections towards the class targets
+      newAW=rtm(oldAW+eL+eR,p.round);
+      const slack=newAW-oldAW-eL-eR; // grid-induced, split evenly so both margins stay near target
+      dL=Math.round(eL+slack/2);
+      dR=newAW-oldAW-dL;
       const lsb=geomSB(gc.leftFine??gc.leftGeom),rsb=geomSB(gc.rightFine??gc.rightGeom);
       const clampL=lsb!==null&&lsb+dL<0;
-      const clampR=rsb!==null&&rsb+(newAW-oldAW-dL)<0;
+      const clampR=rsb!==null&&rsb+dR<0;
       if(clampL||clampR){
         // Negative sidebearings never reach the output: the negative side is
         // pinned at 0 and the advance width stays on the module grid — the
@@ -2604,15 +2672,16 @@ function computeSpacingRows(){
         const exact=oldAW+dLx+dRx;
         const mod=Math.max(1,p.round);
         newAW=Math.ceil(exact/mod-1e-9)*mod;
-        const slack=newAW-exact;
+        const slack2=newAW-exact;
         const sideL=Math.max(0,(lsb??0)+dLx), sideR=Math.max(0,(rsb??0)+dRx);
         const propL=sideL+sideR>0?sideL/(sideL+sideR):0.5;
-        dL=Math.round(dLx+slack*propL);
-        dR=Math.round(newAW-oldAW-dL); // effective right correction
+        dL=Math.round(dLx+slack2*propL);
+        dR=newAW-oldAW-dL; // effective right correction
       }
     }
     const dAW=newAW-oldAW;
-    rows.push({gk,gc,oldAW,newAW,dAW,dL:r2(dL),dR:r2(dR),newL:r2(gL+dL),newR:r2(gR+dR)});
+    const nsb=intLR(gL+dL,gR+dR);
+    rows.push({gk,gc,oldAW,newAW,dAW,dL,dR,newL:nsb.L,newR:nsb.R});
   }
 
   // Narrow glyphs (period, comma, dots, j …): first examine the RESULTING
@@ -2633,9 +2702,8 @@ function computeSpacingRows(){
       const s=halfXhSB(r.gc);
       if(s.l===null||s.r===null)continue;
       const widthDelta=r.newAW-r.oldAW; // fixed — the resulting width, decided above, is never touched
-      const sumSlack=s.l+s.r+widthDelta; // curLSB+curRSB at that fixed width, independent of the L/R split
-      let dL=Math.round(sumSlack/2)-s.l;
-      let dR=widthDelta-dL;              // derived, so dL+dR stays exactly widthDelta
+      let dL=Math.round((s.r-s.l+widthDelta)/2); // whole-unit shift that equalizes the halfXh bearings
+      let dR=widthDelta-dL;              // derived, so dL+dR stays exactly widthDelta (rest → right)
       // Centering reads the clean stem (halfXhSB), so it can land a split
       // that a deep localized overhang elsewhere (e.g. a descender hook)
       // would push past zero at the TRUE minimum (geomSB) — shift the
@@ -2643,9 +2711,10 @@ function computeSpacingRows(){
       // actually overlap. Unlike the removed guard this never reverts the
       // whole centering attempt, it only engages on a real negative bound.
       const trueL=geomSB(r.gc.leftFine??r.gc.leftGeom),trueR=geomSB(r.gc.rightFine??r.gc.rightGeom);
-      if(trueL!==null&&trueL+dL<0){const deficit=-(trueL+dL);dL+=deficit;dR-=deficit;}
-      if(trueR!==null&&trueR+dR<0){const deficit=-(trueR+dR);dR+=deficit;dL-=deficit;}
-      r.dL=r2(dL);r.dR=r2(dR);r.newL=r2(s.l+dL);r.newR=r2(s.r+dR);
+      if(trueL!==null&&trueL+dL<0){const deficit=Math.ceil(-(trueL+dL));dL+=deficit;dR-=deficit;}
+      if(trueR!==null&&trueR+dR<0){const deficit=Math.ceil(-(trueR+dR));dR+=deficit;dL-=deficit;}
+      const nsb=intLR(s.l+dL,s.r+dR);
+      r.dL=dL;r.dR=dR;r.newL=nsb.L;r.newR=nsb.R;
       // r.newAW / r.dAW intentionally untouched — only the L/R split moves
     }
   }
@@ -4319,7 +4388,7 @@ function selectEquiRow(idx){
 // ══════════════════════════════════════════════════════
 // "Global to local" as a UI: the MEASURED values (zones/smooth/blur/cadence/
 // slant) are collected automatically; the DESIGN values (width, stem gap,
-// bias, lazy, min gap) only act inside the pair loop — so every step can
+// inset, bias, lazy, min gap) only act inside the pair loop — so every step can
 // simulate its type sample in real time (pairCorrCore on ~20 pairs) until
 // all values are set. Only the final step runs the full computation.
 // Optician principle: 3 clickable variants per step, plus a fine slider.
@@ -4333,6 +4402,10 @@ const WIZ_STEPS=[
    toggle:{param:'rhythm',label:'Rhythm — stem gaps snap to the cadence grid (lines)'},
    text:'HHOOHHOO nnoonnoo',
    hint:'The HHOOHH experiment: do the gaps between stems look as big as the gaps between round shapes? The stem distance is a pure style choice — smaller = stems closer than rounds.'},
+  // variants/max are re-measured per font in wizOpen (wizInsetFull)
+  {key:'inset',title:'Inset',param:'inset',min:0,max:60,step:1,variants:[0,15,30],unit:' fu',grid:true,
+   text:'noon HOOH nnoo',
+   hint:'Stem vs. round, part two: how far do the stem sides tuck in toward the rounds? 0 keeps the tuck as kern pairs (o·n −1 module etc.); the measured variants (½ and full tuck) bake it into the sidebearings instead — Apply Spacing then carries it, the systematic round-vs-stem kerns disappear, and stem gaps close by twice the value.'},
   {key:'bias',title:'Bias',param:'bias',min:-100,max:100,step:10,variants:[-50,0,50],unit:'',
    text:'rn rm cl vv modern minimum',
    hint:'Legible (−): rn must not look like m, shapes stay clearly apart. Readable (+): the line should flow with a calm rhythm. Choose what matters more for this font.'},
@@ -4359,10 +4432,38 @@ function wizMaybeAutoOpen(){
   if(wizFinishPending){wizFinishPending=false;wizClose();switchTab('equi');return;}
 }
 
+// Measured full tuck (fu) for the Inset step: the contact shortfall of the
+// class base against a flat stem — dMin(base+stemRef) − dMin(base+base),
+// i.e. how much closer the bulge tip must come to match the self-pair.
+// LC and UC are measured separately; the larger one drives the variants.
+function wizInsetFull(){
+  const p=P();
+  let best=0;
+  for(const[baseKey,refs]of[[p.baselc,['n','i','l','h','m','u']],[p.baseuc,['H','I','N','M','U','L']]]){
+    const b=glyphCache[wizL2K[baseKey]];
+    if(!b)continue;
+    for(const rl of refs){
+      const g=glyphCache[wizL2K[rl]];
+      if(!g||stemEdge(g.leftGeom,currentUPM)===null)continue;
+      const self=minPairDist(b.rightGeom,b.leftGeom),mix=minPairDist(b.rightGeom,g.leftGeom);
+      if(self!==null&&mix!==null)best=Math.max(best,mix-self);
+      break; // first usable stem reference per class decides
+    }
+  }
+  return Math.max(0,Math.round(best));
+}
+
 function wizOpen(){
   if(!glyphCache||!Object.keys(glyphCache).length){alert('Load a font first (compute runs automatically).');return;}
   wizL2K={};
   for(const k of Object.keys(glyphCache))wizL2K[glyphCache[k].charLabel]=k;
+  // Inset step: variants 0 · ½ · full of THIS font's measured tuck
+  const insStep=WIZ_STEPS.find(x=>x.key==='inset');
+  if(insStep){
+    const d=wizInsetFull()||(parseInt(document.getElementById('p-round')?.value)||20);
+    insStep.variants=[0,Math.round(d/2),d];
+    insStep.max=Math.max(20,Math.ceil(d*1.5));
+  }
   // start values from the current fields
   wizVals={};wizSel={};
   for(const s of WIZ_STEPS){
@@ -4479,7 +4580,7 @@ function wizAutoValues(){
     const se=stemEdge(l.leftGeom,currentUPM);
     if(se!==null){let mn=Infinity;for(const v of l.leftGeom)if(v!==null&&v<mn)mn=v;serif=(se-mn)>0.01*currentUPM;}
   }
-  return{vals:{width:100,stemgap:100,bias:0,lazy:serif?40:50,mingap:serif?1.5:1},rhythm:true,serif};
+  return{vals:{width:100,stemgap:100,inset:0,bias:0,lazy:serif?40:50,mingap:serif?1.5:1},rhythm:true,serif};
 }
 function wizAuto(){
   const a=wizAutoValues();

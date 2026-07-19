@@ -223,7 +223,12 @@ function buildPairCtx(p,store,upm,yBot,yTop,rhythmGrid){
   const proxUC=(ucC&&pdUC!==null)?pdUC+(baseUC-ucC.mean):null;
   const minGapFU=upm*p.mingap*wf;
   const minGapEff=minGapFU*(1+Math.max(0,-(p.bias||0))/200);
+  // stem-ness of the base glyphs' sides — the inset (stem vs. round) moves
+  // exactly the sides whose stem-ness DIFFERS from the base's, so the base
+  // stays the fixed anchor and repeated runs cannot drift
+  const bStem=g=>g?{r:stemEdge(g.rightGeom,upm)!==null,l:stemEdge(g.leftGeom,upm)!==null}:{r:false,l:false};
   return{upm,baseLC,baseUC,proxLC,proxUC,minGapFU,minGapEff,
+    baseStem:{lc:bStem(nD),uc:bStem(oD)},
     rhythmGrid:rhythmGrid||0,fineRowH:(yTop-yBot)/KT_FINE_N};
 }
 // The complete pair formula: shape classes -> bias beta -> stem gap ->
@@ -251,6 +256,23 @@ function pairCorrCore(gcA,gcB,p,ctx){
     const dS=base*(f-1);
     baseEff=base+dS;if(prox!==null)prox+=dS;
   }
+  // Inset (stem vs. round, part two): the spacing side (09) pulls every
+  // side whose stem-ness differs from the base's in by p.inset. The AIR
+  // target follows every shifted side (that white is missing by design, so
+  // the air model must not reopen it). The CONTACT target follows only when
+  // BOTH facing sides moved (stem+stem: a rhythm decision, not a tuck);
+  // one-sided (round+stem) pairs keep their contact target — their physical
+  // −inset eats the tuck desire, so once Apply Spacing has run, the
+  // systematic round-vs-stem kerns (o·n, o·H …) collapse to 0.
+  if((p.inset||0)>0){
+    const shA=(sA!==null)!==(gcA.cls==='UC'?ctx.baseStem.uc:ctx.baseStem.lc).r;
+    const shB=(sB!==null)!==(gcB.cls==='UC'?ctx.baseStem.uc:ctx.baseStem.lc).l;
+    const nSh=(shA?1:0)+(shB?1:0);
+    if(nSh>0){
+      baseEff-=p.inset*nSh;
+      if(prox!==null&&nSh===2)prox-=2*p.inset;
+    }
+  }
   // air/contact blend + lazy + opening brake
   let raw=baseEff-calc.mean;
   if(shape&&prox!==null&&beta>0)raw=(1-beta)*raw+beta*(prox-shape.dMin);
@@ -258,11 +280,15 @@ function pairCorrCore(gcA,gcB,p,ctx){
   raw*=1-0.4*(shape?shape.openness:0);
   let corr=rtm(raw,p.round);
   // rhythm grid: snap stem+stem gaps to the cadence grid
-  let rhythmic=false;
+  let rhythmic=false,thresholded=false;
   if(ctx.rhythmGrid>1&&nStem===2){
     const gap=sA+sB;
     const target=Math.max(ctx.rhythmGrid,Math.round((gap+corr)/ctx.rhythmGrid)*ctx.rhythmGrid);
     corr=Math.round(target-gap);rhythmic=true;
+    // A snap smaller than one module is noise, not rhythm: the gap already
+    // sits within half a module of its tick — that residue is spacing's
+    // territory, so sub-module pair values never reach the output.
+    if(Math.abs(corr)<p.round){corr=0;rhythmic=false;thresholded=true;}
   }
   // 2D min gap
   let capped=false;
@@ -274,7 +300,6 @@ function pairCorrCore(gcA,gcB,p,ctx){
     }
   }
   // cost-based dropping (replaces the old threshold)
-  let thresholded=false;
   if(!capped&&!rhythmic&&corr!==0){
     const tBase=ctx.upm*0.003,widen=1+Math.abs(bias)/33;
     const tPos=bias>0?tBase*widen:tBase;

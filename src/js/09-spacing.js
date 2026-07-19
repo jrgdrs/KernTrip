@@ -1,15 +1,29 @@
 // ── SPACING CORRECTIONS ────────────────────────────────
 /**
  * Target margins per class come from the base glyphs (o/O). Five rules:
- *   1. The base glyph itself is centered: LSB = RSB (exact, no module
- *      rounding — snapping its own AW to the grid was tried and reverted,
- *      it visibly pulled the base off-center, which defeats the point of
- *      "everything else is based on the base"). "LSB/RSB" here means the
- *      ink extent at half the x-height (halfXhSB), not the true geometric
- *      minimum — that avoids letting serifs (near baseline/cap-height) or
- *      hooks/overshoots skew what should be a stem-width reading.
- *   2. Its centering offset shifts the class targets, so every other
- *      glyph inherits the same offset and keeps fitting the base.
+ *   1. The base glyph goes FIRST, before anything derives from it: its
+ *      advance width snaps to the module grid (nearest module, tracking
+ *      folded in) and the glyph is centered INSIDE that width — the white
+ *      is split so the half-x-height bearings equalize, an odd unit lands
+ *      right. (An earlier attempt snapped the base AW without re-splitting
+ *      the bearings; that pulled the base visibly off-center and was
+ *      reverted — the centered split is what makes the snap safe.)
+ *      "LSB/RSB" here means the ink extent at half the x-height
+ *      (halfXhSB), not the true geometric minimum — that avoids letting
+ *      serifs (near baseline/cap-height) or hooks/overshoots skew what
+ *      should be a stem-width reading.
+ *   2. The class targets are read off the ADJUSTED base (its margins plus
+ *      its dL/dR), so every other glyph inherits the module snap and the
+ *      centering and keeps fitting the base. The L/R corrections are exact
+ *      whole units — ONLY the advance width sits on the module grid
+ *      (Round). Running dL/dR through the module too was the original
+ *      design; it swallowed every correction below half a module, so the
+ *      other glyphs never actually picked up the base's margins/offsets.
+ *      dR is always derived as newAW − oldAW − dL, so the pair stays
+ *      integer-consistent and any rest lands on the right. Inset (stem vs.
+ *      round): sides whose stem-ness differs from the base's get the target
+ *      minus p.inset — Tracy's tuck baked into the bearings; the kern core
+ *      (03) is credited accordingly.
  *   3. Sidebearings never go negative: the negative side is pinned at 0
  *      and the advance width rounds UP to the next module width (< 1
  *      module unit added in total); the remaining slack is distributed
@@ -33,10 +47,11 @@
  * computeSpacingRows() is the single source — table (renderSpacingTable)
  * and Apply Spacing (07) both consume its rows.
  */
-// Two-decimal rounding for the New L / New R columns — finer than the
-// general-purpose r1 (1 decimal) used elsewhere, since this table is where
-// the sub-unit sidebearing precision actually matters to the reader.
-function r2(v){return Math.round(v*100)/100;}
+// New L / New R are read as sidebearings, and sidebearings are whole font
+// units: L is floored and the cut-off rest folded into the right side (a
+// remainder always goes right), so L+R equals the rounded total white.
+// The sub-unit truth lives in the optical averages, not in these columns.
+function intLR(l,r){const L=Math.floor(l);return{L,R:Math.round(l+r)-L};}
 function avgMargin(arr){
   let sum=0,cnt=0;
   for(const v of arr)if(v!==null){sum+=v;cnt++;}
@@ -107,18 +122,33 @@ function computeSpacingRows(){
   const baseLcGC=glyphCache[p.baselc],baseUcGC=glyphCache[p.baseuc];
   const lcBotZ=baseLcGC?botZoneOf(baseLcGC):null, lcTopZ=baseLcGC?topZoneOf(baseLcGC):null;
   const ucBotZ=baseUcGC?botZoneOf(baseUcGC):null, ucTopZ=baseUcGC?topZoneOf(baseUcGC):null;
-  // centering offset per base glyph: shift that equalizes its half-x-height
-  // ink extent — folded into the class targets so all glyphs inherit it
-  const sbOff=gc=>{
-    if(!gc)return 0;
+  // Base pre-pass (rule 1): AW onto the module grid (tracking folded in),
+  // then centered inside that width — dL equalizes the half-x-height
+  // bearings, dR is the integer rest, so an exact tie leaves the odd unit
+  // on the right (half-down rounding). The class targets below are read
+  // off the ADJUSTED base, so every glyph inherits snap + centering.
+  const baseAdj=gc=>{
+    if(!gc)return null;
     const s=halfXhSB(gc);
-    return s.l===null||s.r===null?0:(s.r-s.l)/2;
+    const off=s.l===null||s.r===null?0:s.r-s.l;
+    const newAW=rtm(gc.advanceWidth+2*trk,p.round);
+    const dAW=newAW-gc.advanceWidth;
+    const dL=Math.ceil((off+dAW)/2-0.5);
+    return{newAW,dAW,dL,dR:dAW-dL};
   };
-  const sLc=sbOff(baseLcGC),sUc=sbOff(baseUcGC);
-  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+trk+sLc:null;
-  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+trk-sLc:null;
-  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+trk+sUc:null;
-  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+trk-sUc:null;
+  const adjLc=baseAdj(baseLcGC),adjUc=baseAdj(baseUcGC);
+  // Inset (stem vs. round): sides whose stem-ness differs from the base's
+  // corresponding side get the class target minus p.inset — the base is the
+  // fixed anchor (it never moves), so repeated apply+recompute cannot drift.
+  // The kerning core (03) credits pairs where both facing sides move; mixed
+  // pairs keep the physical −inset as the baked round-vs-stem tuck.
+  const sideStem=(gc,left)=>stemEdge(left?gc.leftGeom:gc.rightGeom,currentUPM)!==null;
+  const bsL={lc:baseLcGC?sideStem(baseLcGC,true):false,uc:baseUcGC?sideStem(baseUcGC,true):false};
+  const bsR={lc:baseLcGC?sideStem(baseLcGC,false):false,uc:baseUcGC?sideStem(baseUcGC,false):false};
+  const baseLcL=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.left,lcBotZ,lcTopZ)+adjLc.dL:null;
+  const baseLcR=baseLcGC&&lcBotZ!==null?avgMarginZones(baseLcGC.right,lcBotZ,lcTopZ)+adjLc.dR:null;
+  const baseUcL=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.left,ucBotZ,ucTopZ)+adjUc.dL:null;
+  const baseUcR=baseUcGC&&ucBotZ!==null?avgMarginZones(baseUcGC.right,ucBotZ,ucTopZ)+adjUc.dR:null;
 
   const rows=[];
   for(const gk of gks){
@@ -134,17 +164,22 @@ function computeSpacingRows(){
     const oldAW=gc.advanceWidth;
     let dL,dR,newAW;
     if(isBase){
-      // exact centering: LSB = RSB afterwards, module rounding would break it
-      const s=isUC?sUc:sLc;
-      dL=Math.round(trk+s);dR=Math.round(trk-s);
-      newAW=oldAW+dL+dR;
+      // rule 1, decided in the pre-pass above: module-snapped AW, centered
+      // split. o and O take the identical path.
+      const adj=isUC?adjUc:adjLc;
+      newAW=adj.newAW;dL=adj.dL;dR=adj.dR;
     }else{
-      dL=rtm(bL-gL,p.round);
-      dR=rtm(bR-gR,p.round);
-      newAW=rtm(oldAW+dL+dR,p.round);
+      const cKey=isUC?'uc':'lc';
+      const insL=(p.inset||0)>0&&sideStem(gc,true)!==bsL[cKey]?p.inset:0;
+      const insR=(p.inset||0)>0&&sideStem(gc,false)!==bsR[cKey]?p.inset:0;
+      const eL=bL-insL-gL,eR=bR-insR-gR; // exact fractional corrections towards the class targets
+      newAW=rtm(oldAW+eL+eR,p.round);
+      const slack=newAW-oldAW-eL-eR; // grid-induced, split evenly so both margins stay near target
+      dL=Math.round(eL+slack/2);
+      dR=newAW-oldAW-dL;
       const lsb=geomSB(gc.leftFine??gc.leftGeom),rsb=geomSB(gc.rightFine??gc.rightGeom);
       const clampL=lsb!==null&&lsb+dL<0;
-      const clampR=rsb!==null&&rsb+(newAW-oldAW-dL)<0;
+      const clampR=rsb!==null&&rsb+dR<0;
       if(clampL||clampR){
         // Negative sidebearings never reach the output: the negative side is
         // pinned at 0 and the advance width stays on the module grid — the
@@ -156,15 +191,16 @@ function computeSpacingRows(){
         const exact=oldAW+dLx+dRx;
         const mod=Math.max(1,p.round);
         newAW=Math.ceil(exact/mod-1e-9)*mod;
-        const slack=newAW-exact;
+        const slack2=newAW-exact;
         const sideL=Math.max(0,(lsb??0)+dLx), sideR=Math.max(0,(rsb??0)+dRx);
         const propL=sideL+sideR>0?sideL/(sideL+sideR):0.5;
-        dL=Math.round(dLx+slack*propL);
-        dR=Math.round(newAW-oldAW-dL); // effective right correction
+        dL=Math.round(dLx+slack2*propL);
+        dR=newAW-oldAW-dL; // effective right correction
       }
     }
     const dAW=newAW-oldAW;
-    rows.push({gk,gc,oldAW,newAW,dAW,dL:r2(dL),dR:r2(dR),newL:r2(gL+dL),newR:r2(gR+dR)});
+    const nsb=intLR(gL+dL,gR+dR);
+    rows.push({gk,gc,oldAW,newAW,dAW,dL,dR,newL:nsb.L,newR:nsb.R});
   }
 
   // Narrow glyphs (period, comma, dots, j …): first examine the RESULTING
@@ -185,9 +221,8 @@ function computeSpacingRows(){
       const s=halfXhSB(r.gc);
       if(s.l===null||s.r===null)continue;
       const widthDelta=r.newAW-r.oldAW; // fixed — the resulting width, decided above, is never touched
-      const sumSlack=s.l+s.r+widthDelta; // curLSB+curRSB at that fixed width, independent of the L/R split
-      let dL=Math.round(sumSlack/2)-s.l;
-      let dR=widthDelta-dL;              // derived, so dL+dR stays exactly widthDelta
+      let dL=Math.round((s.r-s.l+widthDelta)/2); // whole-unit shift that equalizes the halfXh bearings
+      let dR=widthDelta-dL;              // derived, so dL+dR stays exactly widthDelta (rest → right)
       // Centering reads the clean stem (halfXhSB), so it can land a split
       // that a deep localized overhang elsewhere (e.g. a descender hook)
       // would push past zero at the TRUE minimum (geomSB) — shift the
@@ -195,9 +230,10 @@ function computeSpacingRows(){
       // actually overlap. Unlike the removed guard this never reverts the
       // whole centering attempt, it only engages on a real negative bound.
       const trueL=geomSB(r.gc.leftFine??r.gc.leftGeom),trueR=geomSB(r.gc.rightFine??r.gc.rightGeom);
-      if(trueL!==null&&trueL+dL<0){const deficit=-(trueL+dL);dL+=deficit;dR-=deficit;}
-      if(trueR!==null&&trueR+dR<0){const deficit=-(trueR+dR);dR+=deficit;dL-=deficit;}
-      r.dL=r2(dL);r.dR=r2(dR);r.newL=r2(s.l+dL);r.newR=r2(s.r+dR);
+      if(trueL!==null&&trueL+dL<0){const deficit=Math.ceil(-(trueL+dL));dL+=deficit;dR-=deficit;}
+      if(trueR!==null&&trueR+dR<0){const deficit=Math.ceil(-(trueR+dR));dR+=deficit;dL-=deficit;}
+      const nsb=intLR(s.l+dL,s.r+dR);
+      r.dL=dL;r.dR=dR;r.newL=nsb.L;r.newR=nsb.R;
       // r.newAW / r.dAW intentionally untouched — only the L/R split moves
     }
   }

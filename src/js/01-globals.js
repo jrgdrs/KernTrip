@@ -48,7 +48,7 @@ let unicodeToGlyphName={};   // codepoint → glyph name (Glyphs mode)
 // Legible (-): contact model stronger, min gap up to +50%, small tightenings
 // are dropped more freely. Readable (+): air model stronger, small loosenings
 // are dropped more freely. Base drop tolerance: 0.3% of UPM.
-const DEFAULTS={zones:16,smooth:50,round:20,blur:1,mingap:1,bias:0,lazy:50,width:100,stemgap:100,rhythm:true,baselc:'o',baseuc:'O',tracking:0,pairlimit:6400,glowblur:0,glow:false,slant:0};
+const DEFAULTS={zones:16,smooth:50,round:20,blur:1,mingap:1,bias:0,lazy:50,width:100,stemgap:100,inset:0,rhythm:true,baselc:'o',baseuc:'O',tracking:0,pairlimit:6400,glowblur:0,glow:false,slant:0};
 
 function P(){
   const mg=parseFloat(document.getElementById('p-mingap').value);
@@ -62,6 +62,7 @@ function P(){
     lazy:      Math.max(0,Math.min(99,parseFloat(document.getElementById('p-lazy').value)||0)),
     width:     (()=>{const w=parseFloat(document.getElementById('p-width')?.value);return isNaN(w)?DEFAULTS.width:Math.max(25,Math.min(300,w));})(),
     stemgap:   (()=>{const s=parseFloat(document.getElementById('p-stemgap')?.value);return isNaN(s)?DEFAULTS.stemgap:Math.max(25,Math.min(300,s));})(),
+    inset:     Math.max(0,parseFloat(document.getElementById('p-inset')?.value)||0),
     rhythm:    document.getElementById('p-rhythm')?.checked??DEFAULTS.rhythm,
     baselc:    (document.getElementById('p-baselc').value||DEFAULTS.baselc).trim(),
     baseuc:    (document.getElementById('p-baseuc').value||DEFAULTS.baseuc).trim(),
@@ -73,7 +74,7 @@ function P(){
   };
 }
 function resetParams(){
-  ['zones','smooth','round','blur','mingap','bias','lazy','width','stemgap','tracking','pairlimit','glowblur','slant'].forEach(k=>{
+  ['zones','smooth','round','blur','mingap','bias','lazy','width','stemgap','inset','tracking','pairlimit','glowblur','slant'].forEach(k=>{
     document.getElementById('p-'+k).value=DEFAULTS[k];
   });
   document.getElementById('p-baselc').value=DEFAULTS.baselc;
